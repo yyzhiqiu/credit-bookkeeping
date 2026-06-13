@@ -47,6 +47,11 @@ class AccountCreate(BaseModel):
     name: str
     initial_amount: float
     weeks_count: int = 4
+    api_type: Optional[str] = None
+    api_url: Optional[str] = None
+    api_key: Optional[str] = None
+    api_account_id: Optional[str] = None
+    api_session_token: Optional[str] = None
 
     @field_validator("initial_amount")
     @classmethod
@@ -65,6 +70,11 @@ class AccountCreate(BaseModel):
 class AccountUpdate(BaseModel):
     name: Optional[str] = None
     status: Optional[str] = None
+    api_type: Optional[str] = None
+    api_url: Optional[str] = None
+    api_key: Optional[str] = None
+    api_account_id: Optional[str] = None
+    api_session_token: Optional[str] = None
 
 class RechargeRequest(BaseModel):
     amount: float
@@ -83,6 +93,11 @@ class AccountOut(BaseModel):
     status: str
     created_at: datetime
     active_cycle: Optional[CycleOut] = None
+    api_type: Optional[str] = None
+    api_url: Optional[str] = None
+    api_key: Optional[str] = None  # Masked value
+    api_account_id: Optional[str] = None
+    api_session_token: Optional[str] = None  # Masked value
 
     class Config:
         from_attributes = True
@@ -92,6 +107,20 @@ class AccountDeleteInfo(BaseModel):
     account_name: str
     cycle_count: int
     record_count: int
+
+# ── Codex Quota Response ─────────────────────────────────────────────────────
+
+class CodexQuotaResponse(BaseModel):
+    plan_type: Optional[str] = None
+    primary_used_percent: Optional[float] = None
+    primary_remaining_percent: Optional[float] = None
+    primary_reset_after_seconds: Optional[int] = None
+    
+    secondary_used_percent: Optional[float] = None
+    secondary_remaining_percent: Optional[float] = None
+    secondary_reset_after_seconds: Optional[int] = None
+    
+    token_expires_at: Optional[datetime] = None
 
 
 # ── Record ───────────────────────────────────────────────────────────────────
@@ -169,6 +198,7 @@ class RecordOut(BaseModel):
 class CycleDashboardItem(BaseModel):
     account_id: str
     account_name: str
+    api_type: Optional[str] = None
     cycle_id: str
     cycle_number: int
     amount: float

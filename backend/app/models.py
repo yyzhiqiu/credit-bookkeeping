@@ -28,6 +28,13 @@ class Account(Base):
     name = Column(String(100), nullable=False)
     status = Column(Enum("active", "disabled"), default="active", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # API configuration for automatic quota queries (e.g. Codex)
+    api_type = Column(String(50), nullable=True)
+    api_url = Column(String(255), nullable=True)
+    api_key = Column(Text, nullable=True)
+    api_account_id = Column(String(100), nullable=True)
+    api_session_token = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="accounts")
     cycles = relationship("Cycle", back_populates="account", cascade="all, delete-orphan")

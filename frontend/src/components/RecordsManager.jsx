@@ -64,6 +64,148 @@ export default function RecordsManager() {
   const [prevRemaining,  setPrevRemaining]  = useState(100)
   const [activeCycles,   setActiveCycles]   = useState([])
 
+  // Codex Quota States
+  const [fetchingQuota,  setFetchingQuota]  = useState(false)
+  const [quotaError,     setQuotaError]     = useState('')
+  const [quotaData,      setQuotaData]      = useState(null)
+  const [showTokenUpdate, setShowTokenUpdate] = useState(false)
+  const [newTokenValue, setNewTokenValue]   = useState('')
+
+  const formatSeconds = (sec) => {
+    if (sec === null || sec === undefined) return '—'
+    const h = Math.floor(sec / 3600)
+    const m = Math.floor((sec % 3600) / 60)
+    if (h > 0) return `${h}小时${m}分`
+    return `${m}分钟`
+  }
+
+  const getResetCalendarTime = (seconds) => {
+    if (seconds === null || seconds === undefined || seconds <= 0) return ''
+    const targetDate = new Date(Date.now() + seconds * 1000)
+    const hours = String(targetDate.getHours()).padStart(2, '0')
+    const minutes = String(targetDate.getMinutes()).padStart(2, '0')
+    
+    const now = new Date()
+    const isToday = now.getDate() === targetDate.getDate() && now.getMonth() === targetDate.getMonth() && now.getFullYear() === targetDate.getFullYear()
+    const tomorrow = new Date(now)
+    tomorrow.setDate(now.getDate() + 1)
+    const isTomorrow = tomorrow.getDate() === targetDate.getDate() && tomorrow.getMonth() === targetDate.getMonth() && tomorrow.getFullYear() === targetDate.getFullYear()
+
+    if (isToday) {
+      return `今天 ${hours}:${minutes}`
+    } else if (isTomorrow) {
+      return `明天 ${hours}:${minutes}`
+    } else {
+      const month = targetDate.getMonth() + 1
+      const date = targetDate.getDate()
+      return `${month}月${date}日 ${hours}:${minutes}`
+    }
+  }
+
+  const formatTokenExpiry = (expiryStr) => {
+    if (!expiryStr) return null
+    const expiryDate = new Date(expiryStr)
+    const diffMs = expiryDate - Date.now()
+    if (diffMs <= 0) return <span className="text-rose-500 font-bold">已过期</span>
+    
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    
+    const year = expiryDate.getFullYear()
+    const month = String(expiryDate.getMonth() + 1).padStart(2, '0')
+    const date = String(expiryDate.getDate()).padStart(2, '0')
+    const hours = String(expiryDate.getHours()).padStart(2, '0')
+    const minutes = String(expiryDate.getMinutes()).padStart(2, '0')
+    const formattedDate = `${year}-${month}-${date} ${hours}:${minutes}`
+
+    let remainingText = ''
+    if (diffDays > 0) {
+      remainingText = `剩 ${diffDays} 天`
+    } else {
+      remainingText = `剩 ${diffHours} 小时`
+    }
+    
+    return `${formattedDate} (${remainingText})`
+  }
+
+  const handleFetchQuota = useCallback(async (targetId = formAccId, force = false) => {
+    if (!targetId) return
+    setFetchingQuota(true)
+    setQuotaError('')
+    setQuotaData(null)
+    try {
+      const res = await accountsApi.fetchBalance(targetId, force)
+      setQuotaData(res.data)
+      
+      // Auto-detect reset and switch to next week
+      const acc = accounts.find(a => a.id === targetId)
+      if (acc?.active_cycle) {
+        const onlineRemaining = res.data.secondary_remaining_percent !== null 
+          ? res.data.secondary_remaining_percent 
+          : res.data.primary_remaining_percent
+        
+        const currentWeekNum = acc.active_cycle.current_week_num || 1
+        const weekRecs = records.filter(
+          r => r.account_id === targetId &&
+               r.cycle_id === acc.active_cycle.id &&
+               r.week_number === currentWeekNum
+        )
+        let weekPrevRemaining = 100
+        if (weekRecs.length > 0) {
+          const latest = weekRecs.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0]
+          weekPrevRemaining = latest.remaining_pct
+        }
+        
+        if (onlineRemaining !== null && onlineRemaining > weekPrevRemaining) {
+          const nextWeek = currentWeekNum + 1
+          setFormWeek(nextWeek)
+          flash(`检测到额度重置，已自动调整至第 ${nextWeek} 周`, 'success')
+        }
+      }
+      
+      return res.data
+    } catch (err) {
+      setQuotaError(err.response?.data?.detail || '获取额度失败，请检查配置或网络')
+    } finally {
+      setFetchingQuota(false)
+    }
+  }, [formAccId, accounts, records])
+
+  const handleUpdateToken = async () => {
+    if (!newTokenValue.trim()) return
+    try {
+      const acc = accounts.find(a => a.id === formAccId)
+      await accountsApi.update(formAccId, {
+        name: acc.name,
+        api_type: acc.api_type,
+        api_url: acc.api_url,
+        api_key: newTokenValue.trim(),
+        api_account_id: acc.api_account_id,
+      })
+      flash('Token 更新成功！')
+      setShowTokenUpdate(false)
+      setNewTokenValue('')
+      await loadAccounts()
+      handleFetchQuota(formAccId).catch(() => {})
+    } catch {
+      flash('Token 更新失败', 'error')
+    }
+  }
+
+  // Reset and auto-fetch quota data when selected account or modal state changes
+  useEffect(() => {
+    setQuotaData(null)
+    setQuotaError('')
+    setShowTokenUpdate(false)
+    setNewTokenValue('')
+    if (showModal && formAccId) {
+      const acc = accounts.find(a => a.id === formAccId)
+      if (acc && acc.api_type === 'codex') {
+        handleFetchQuota(formAccId).catch(() => {})
+      }
+    }
+  }, [formAccId, showModal, accounts, handleFetchQuota])
+
   const flash = (text, type = 'success') => {
     setMsg({ text, type })
     setTimeout(() => setMsg({ text: '', type: '' }), 3000)
@@ -174,6 +316,7 @@ export default function RecordsManager() {
     }
   }
 
+
   // ── Edit ─────────────────────────────────────────────────────────────────
   const handleEditSave = async (e) => {
     e.preventDefault()
@@ -208,6 +351,9 @@ export default function RecordsManager() {
   }
 
   const selectedAccCycle = accounts.find(a => a.id === formAccId)?.active_cycle
+  const selectedAccount = accounts.find(a => a.id === formAccId)
+  const hasApiQuery = selectedAccount && selectedAccount.api_type === 'codex'
+
 
   return (
     <div className="space-y-5">
@@ -335,6 +481,134 @@ export default function RecordsManager() {
                   )}
                 </div>
               </div>
+              
+              {/* Codex Quota Query Section */}
+              {hasApiQuery && (
+                <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 space-y-2.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-semibold text-blue-800">Codex 实时额度查询</span>
+                    <button
+                      type="button"
+                      disabled={fetchingQuota}
+                      onClick={() => handleFetchQuota(formAccId, true)}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center space-x-1 disabled:opacity-50"
+                    >
+                      {fetchingQuota ? '查询中...' : '重新查询'}
+                    </button>
+                  </div>
+                  
+                  {quotaError && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-rose-500 font-medium">{quotaError}</p>
+                      {!showTokenUpdate ? (
+                        <button
+                          type="button"
+                          onClick={() => { setShowTokenUpdate(true); setNewTokenValue('') }}
+                          className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 underline"
+                        >
+                          快捷更新 Token
+                        </button>
+                      ) : (
+                        <div className="mt-1.5 p-2 bg-white rounded border border-slate-200 space-y-1.5">
+                          <textarea
+                            value={newTokenValue}
+                            onChange={(e) => setNewTokenValue(e.target.value)}
+                            placeholder="粘贴新 Access Token (ey...)"
+                            rows={2}
+                            className="w-full text-xs font-mono p-1 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                          <div className="flex justify-end space-x-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setShowTokenUpdate(false)}
+                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-[10px] font-medium"
+                            >
+                              取消
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleUpdateToken}
+                              className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-medium"
+                            >
+                              保存并重试
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {quotaData && (
+                    <div className="space-y-2 text-xs">
+                      <div className="flex flex-col gap-0.5 text-[11px] text-slate-500 font-medium">
+                        <p>账号套餐: <span className="font-bold text-blue-700 uppercase">{quotaData.plan_type || '未知'}</span></p>
+                        {quotaData.token_expires_at && (
+                          <p>Token 有效期至: {formatTokenExpiry(quotaData.token_expires_at)}</p>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {quotaData.primary_remaining_percent !== null && (
+                          <div className="p-2 bg-white rounded-lg border border-slate-100 flex flex-col justify-between">
+                            <div>
+                              <span className="block font-medium text-slate-600">5小时额度剩余</span>
+                              <span className="block font-bold text-blue-600 text-sm mt-0.5">
+                                {quotaData.primary_remaining_percent.toFixed(2)}%
+                              </span>
+                              <span className="block text-[10px] text-slate-400 mt-0.5">
+                                已用: {quotaData.primary_used_percent}%
+                              </span>
+                              {quotaData.primary_reset_after_seconds > 0 && (
+                                <span className="block text-[10px] text-amber-600 mt-0.5 font-medium leading-normal">
+                                  刷新时间: <span className="font-bold">{getResetCalendarTime(quotaData.primary_reset_after_seconds)}</span>
+                                  <span className="block text-[9px] text-amber-500">({formatSeconds(quotaData.primary_reset_after_seconds)}后)</span>
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-2">
+                              <button
+                                type="button"
+                                onClick={() => handleRemainingChange(+(quotaData.primary_remaining_percent).toFixed(2))}
+                                className="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold py-1 px-1.5 rounded text-[10px] transition-colors"
+                              >
+                                填入此剩余
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {quotaData.secondary_remaining_percent !== null && (
+                          <div className="p-2 bg-white rounded-lg border border-slate-100 flex flex-col justify-between">
+                            <div>
+                              <span className="block font-medium text-slate-600">本周额度剩余</span>
+                              <span className="block font-bold text-emerald-600 text-sm mt-0.5">
+                                {quotaData.secondary_remaining_percent.toFixed(2)}%
+                              </span>
+                              <span className="block text-[10px] text-slate-400 mt-0.5">
+                                已用: {quotaData.secondary_used_percent}%
+                              </span>
+                              {quotaData.secondary_reset_after_seconds > 0 && (
+                                <span className="block text-[10px] text-amber-600 mt-0.5 font-medium leading-normal">
+                                  刷新时间: <span className="font-bold">{getResetCalendarTime(quotaData.secondary_reset_after_seconds)}</span>
+                                  <span className="block text-[9px] text-amber-500">({formatSeconds(quotaData.secondary_reset_after_seconds)}后)</span>
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-2">
+                              <button
+                                type="button"
+                                onClick={() => handleRemainingChange(+(quotaData.secondary_remaining_percent).toFixed(2))}
+                                className="w-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold py-1 px-1.5 rounded text-[10px] transition-colors"
+                              >
+                                填入此剩余
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Linked input */}
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                 <label className="flex items-start space-x-2 mb-3 cursor-pointer">

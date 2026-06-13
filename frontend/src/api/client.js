@@ -41,6 +41,7 @@ export const accountsApi = {
   delete: (id) => api.delete(`/accounts/${id}`),
   recharge: (id, data) => api.post(`/accounts/${id}/recharge`, data),
   dashboard: () => api.get('/accounts/dashboard/summary'),
+  fetchBalance: (id, force = false) => api.get(`/accounts/${id}/fetch-balance`, { params: { force_refresh: force } }),
 }
 
 // ── Records ───────────────────────────────────────────────────────────────────

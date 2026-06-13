@@ -9,3 +9,4 @@ python-dotenv==1.0.1
 python-multipart==0.0.9
 pydantic-settings==2.2.1
 httpx==0.28.1
+redis==5.0.4

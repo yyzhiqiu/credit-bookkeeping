@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Select from './Select'
 import {
-  Plus, RefreshCw, Play, Power, Edit, Trash, AlertCircle, CheckCircle2,
+  Plus, RefreshCw, Play, Power, Edit, Trash, AlertCircle, CheckCircle2, HelpCircle,
 } from 'lucide-react'
 import { accountsApi } from '../api/client'
 
@@ -47,6 +47,13 @@ export default function AccountsManager({ onTabChange }) {
   const [rechargeAmt,   setRechargeAmt]   = useState(140)
   const [rechargeWeeks, setRechargeWeeks] = useState(4)
 
+  // API Config Forms
+  const [newApiType,         setNewApiType]         = useState('disabled')
+  const [newApiUrl,          setNewApiUrl]          = useState('https://chatgpt.com')
+  const [newApiKey,          setNewApiKey]          = useState('')
+  const [newApiAccountId,    setNewApiAccountId]    = useState('')
+  const [newApiSessionToken, setNewApiSessionToken] = useState('')
+
   const flash = (text, type = 'success') => {
     setMsg({ text, type })
     setTimeout(() => setMsg({ text: '', type: '' }), 3000)
@@ -69,9 +76,23 @@ export default function AccountsManager({ onTabChange }) {
   // ── Create ──────────────────────────────────────────────────────────────
   const handleCreate = async (e) => {
     e.preventDefault()
+    if (newApiType === 'codex' && !newApiKey.trim() && !newApiSessionToken.trim()) {
+      flash('Access Token 与 Session Cookie 必须至少填写一项', 'error')
+      return
+    }
     try {
-      await accountsApi.create({ name: newName, initial_amount: Number(newAmount), weeks_count: Number(newWeeks) })
+      await accountsApi.create({
+        name: newName,
+        initial_amount: Number(newAmount),
+        weeks_count: Number(newWeeks),
+        api_type: newApiType,
+        api_url: newApiUrl,
+        api_key: newApiKey || null,
+        api_account_id: newApiAccountId || null,
+        api_session_token: newApiSessionToken || null,
+      })
       setShowCreate(false); setNewName(''); setNewAmount(140); setNewWeeks(4)
+      setNewApiType('disabled'); setNewApiUrl('https://chatgpt.com'); setNewApiKey(''); setNewApiAccountId(''); setNewApiSessionToken('')
       flash('账号创建成功，已开启第 1 期')
       load()
     } catch (err) {
@@ -106,10 +127,21 @@ export default function AccountsManager({ onTabChange }) {
   // ── Edit name ────────────────────────────────────────────────────────────
   const handleEditSave = async (e) => {
     e.preventDefault()
+    if (editingAcc.api_type === 'codex' && !editingAcc.api_key?.trim() && !editingAcc.api_session_token?.trim()) {
+      flash('Access Token 与 Session Cookie 必须至少填写一项', 'error')
+      return
+    }
     try {
-      await accountsApi.update(editingAcc.id, { name: editingAcc.name })
+      await accountsApi.update(editingAcc.id, {
+        name: editingAcc.name,
+        api_type: editingAcc.api_type || 'disabled',
+        api_url: editingAcc.api_url || '',
+        api_key: editingAcc.api_key || '',
+        api_account_id: editingAcc.api_account_id || '',
+        api_session_token: editingAcc.api_session_token || '',
+      })
       setEditingAcc(null)
-      flash('账号名称已修改')
+      flash('账号配置已修改')
       load()
     } catch {
       flash('修改失败', 'error')
@@ -250,6 +282,69 @@ export default function AccountsManager({ onTabChange }) {
             <p className="text-xs text-slate-500">
               周预算按配置周数平均 = {Number(newAmount) > 0 && Number(newWeeks) > 0 ? fmt(Number(newAmount) / Number(newWeeks)) : '—'} / 周
             </p>
+            
+            <div className="border-t border-slate-100 pt-3 mt-3">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">自动额度查询</label>
+              <div className="space-y-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">查询方式</label>
+                  <Select
+                    value={newApiType}
+                    onChange={(val) => {
+                      setNewApiType(val);
+                      if (val === 'codex' && !newApiUrl) {
+                        setNewApiUrl('https://chatgpt.com');
+                      }
+                    }}
+                    options={[
+                      { value: 'disabled', label: '不启用' },
+                      { value: 'codex', label: 'Codex (ChatGPT) 官方接口' }
+                    ]}
+                  />
+                </div>
+                 {newApiType === 'codex' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">API 基础地址</label>
+                      <input type="text" value={newApiUrl} onChange={(e) => setNewApiUrl(e.target.value)} required className="form-input text-xs" placeholder="https://chatgpt.com" />
+                    </div>
+                    <div>
+                      <div className="flex items-center mb-1">
+                        <label className="block text-xs font-semibold text-blue-700">Session Cookie (__Secure-next-auth.session-token)</label>
+                        <span className="relative group inline-block ml-1.5 cursor-help align-middle">
+                          <HelpCircle className="text-slate-400 hover:text-blue-500 transition-colors" size={14} />
+                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-slate-900/95 backdrop-blur text-white text-[11px] font-normal p-3 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-xl z-50 leading-relaxed scale-95 group-hover:scale-100 origin-bottom">
+                            <span className="font-semibold text-blue-300 block mb-1">Session Cookie 配置说明</span>
+                            登录 ChatGPT 后，按 F12 打开开发者工具 ➔ Application (应用) / Storage (存储) ➔ Cookies ➔ <code>https://chatgpt.com</code>，复制 <code>__Secure-next-auth.session-token</code> 的值。<strong>配置后后台会自动帮您刷新 Access Token</strong>。
+                            <hr className="border-slate-700 my-1.5" />
+                            <span className="font-semibold text-amber-300 block mb-1">💡 关于 .0 和 .1 分片 Cookie</span>
+                            如果含有 <code>.0</code> 和 <code>.1</code>，<strong>两者必须同时提供</strong>以避免查询额度返回 401：
+                            <ul className="list-disc pl-3.5 space-y-1 mt-1 text-slate-300">
+                              <li><strong>方式一：</strong>拼接两个键值对粘贴，如：<code>__Secure-next-auth.session-token.0=xxx; __Secure-next-auth.session-token.1=yyy</code></li>
+                              <li><strong>方式二：</strong>直接复制浏览器网络请求（Request Headers）中整段 <code>Cookie</code> 粘贴，系统会自动识别提取。</li>
+                            </ul>
+                            <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900/95"></span>
+                          </span>
+                        </span>
+                      </div>
+                      <textarea value={newApiSessionToken} onChange={(e) => setNewApiSessionToken(e.target.value)} rows={2} className="form-input text-xs font-mono border-blue-200 focus:border-blue-500" placeholder="粘贴 __Secure-next-auth.session-token Cookie 值..." />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Access Token (如果填了 Session Cookie，此项可不填)</label>
+                      <textarea value={newApiKey} onChange={(e) => setNewApiKey(e.target.value)} rows={2} className="form-input text-xs font-mono" placeholder="ey..." />
+                      <p className="text-[10px] text-slate-400 mt-1 leading-normal">
+                        提示：请先在浏览器登录 ChatGPT，访问 <a href="https://chatgpt.com/api/auth/session" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">https://chatgpt.com/api/auth/session</a>，复制返回的 JSON 数据中 <code>accessToken</code> 的值并填入此处。
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">ChatGPT 账号 ID (可选，用于团队账号)</label>
+                      <input type="text" value={newApiAccountId} onChange={(e) => setNewApiAccountId(e.target.value)} className="form-input text-xs" placeholder="例如: g-xxx / personal-xxx" />
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
             <div className="flex justify-end space-x-3 mt-6">
               <button type="button" onClick={() => setShowCreate(false)} className="px-5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-medium transition-colors text-sm">取消</button>
               <button type="submit" className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm">确认创建</button>
@@ -295,6 +390,70 @@ export default function AccountsManager({ onTabChange }) {
               <label className="block text-sm font-medium text-slate-700 mb-1">账号名称</label>
               <input type="text" value={editingAcc.name} onChange={(e) => setEditingAcc({ ...editingAcc, name: e.target.value })} required className="form-input" />
             </div>
+
+            <div className="border-t border-slate-100 pt-3 mt-3">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">自动额度查询</label>
+              <div className="space-y-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">查询方式</label>
+                  <Select
+                    value={editingAcc.api_type || 'disabled'}
+                    onChange={(val) => {
+                      const updated = { ...editingAcc, api_type: val };
+                      if (val === 'codex' && !updated.api_url) {
+                        updated.api_url = 'https://chatgpt.com';
+                      }
+                      setEditingAcc(updated);
+                    }}
+                    options={[
+                      { value: 'disabled', label: '不启用' },
+                      { value: 'codex', label: 'Codex (ChatGPT) 官方接口' }
+                    ]}
+                  />
+                </div>
+                 {editingAcc.api_type === 'codex' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">API 基础地址</label>
+                      <input type="text" value={editingAcc.api_url || ''} onChange={(e) => setEditingAcc({ ...editingAcc, api_url: e.target.value })} required className="form-input text-xs" placeholder="https://chatgpt.com" />
+                    </div>
+                    <div>
+                      <div className="flex items-center mb-1">
+                        <label className="block text-xs font-semibold text-blue-700">Session Cookie (__Secure-next-auth.session-token) (留空不修改 / 输入空串可清除)</label>
+                        <span className="relative group inline-block ml-1.5 cursor-help align-middle">
+                          <HelpCircle className="text-slate-400 hover:text-blue-500 transition-colors" size={14} />
+                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-slate-900/95 backdrop-blur text-white text-[11px] font-normal p-3 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-xl z-50 leading-relaxed scale-95 group-hover:scale-100 origin-bottom">
+                            <span className="font-semibold text-blue-300 block mb-1">Session Cookie 配置说明</span>
+                            登录 ChatGPT 后，按 F12 打开开发者工具 ➔ Application (应用) / Storage (存储) ➔ Cookies ➔ <code>https://chatgpt.com</code>，复制 <code>__Secure-next-auth.session-token</code> 的值。<strong>配置后后台会自动帮您刷新 Access Token</strong>。
+                            <hr className="border-slate-700 my-1.5" />
+                            <span className="font-semibold text-amber-300 block mb-1">💡 关于 .0 和 .1 分片 Cookie</span>
+                            如果含有 <code>.0</code> 和 <code>.1</code>，<strong>两者必须同时提供</strong>以避免查询额度返回 401：
+                            <ul className="list-disc pl-3.5 space-y-1 mt-1 text-slate-300">
+                              <li><strong>方式一：</strong>拼接两个键值对粘贴，如：<code>__Secure-next-auth.session-token.0=xxx; __Secure-next-auth.session-token.1=yyy</code></li>
+                              <li><strong>方式二：</strong>直接复制浏览器网络请求（Request Headers）中整段 <code>Cookie</code> 粘贴，系统会自动识别提取。</li>
+                            </ul>
+                            <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900/95"></span>
+                          </span>
+                        </span>
+                      </div>
+                      <textarea value={editingAcc.api_session_token || ''} onChange={(e) => setEditingAcc({ ...editingAcc, api_session_token: e.target.value })} rows={2} className="form-input text-xs font-mono border-blue-200 focus:border-blue-500" placeholder="粘贴 __Secure-next-auth.session-token Cookie 值..." />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Access Token (留空不修改 / 输入空串可清除)</label>
+                      <textarea value={editingAcc.api_key || ''} onChange={(e) => setEditingAcc({ ...editingAcc, api_key: e.target.value })} rows={2} className="form-input text-xs font-mono" placeholder="ey..." />
+                      <p className="text-[10px] text-slate-400 mt-1 leading-normal">
+                        提示：请先在浏览器登录 ChatGPT，访问 <a href="https://chatgpt.com/api/auth/session" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">https://chatgpt.com/api/auth/session</a>，复制返回的 <code>accessToken</code> 值。
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">ChatGPT 账号 ID (可选，用于团队账号)</label>
+                      <input type="text" value={editingAcc.api_account_id || ''} onChange={(e) => setEditingAcc({ ...editingAcc, api_account_id: e.target.value })} className="form-input text-xs" placeholder="例如: g-xxx / personal-xxx" />
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
             <div className="flex justify-end space-x-3 mt-6">
               <button type="button" onClick={() => setEditingAcc(null)} className="px-5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-medium text-sm">取消</button>
               <button type="submit" className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm">保存</button>

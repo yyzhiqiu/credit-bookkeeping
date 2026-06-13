@@ -8,9 +8,30 @@ from ..engine import calculate_current_week, get_max_recorded_week
 from ..schemas import (
     AccountCreate, AccountUpdate, AccountOut, AccountDeleteInfo,
     RechargeRequest, CycleOut, DashboardOut, CycleDashboardItem,
+    CodexQuotaResponse,
 )
+import httpx
+import base64
+import json
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
+
+def _get_jwt_exp(token: str) -> Optional[datetime]:
+    try:
+        parts = token.split('.')
+        if len(parts) != 3:
+            return None
+        payload_b64 = parts[1]
+        payload_b64 += '=' * (-len(payload_b64) % 4)
+        payload_json = base64.urlsafe_b64decode(payload_b64).decode('utf-8')
+        payload = json.loads(payload_json)
+        exp = payload.get('exp')
+        if exp:
+            return datetime.fromtimestamp(exp, tz=timezone.utc)
+    except Exception:
+        pass
+    return None
 
 
 def _build_cycle_out(cycle: models.Cycle) -> Optional[CycleOut]:
@@ -35,12 +56,32 @@ def _build_cycle_out(cycle: models.Cycle) -> Optional[CycleOut]:
 
 def _build_account_out(acc: models.Account) -> AccountOut:
     active_cycle = next((c for c in acc.cycles if c.status == "active"), None)
+    
+    masked_key = None
+    if acc.api_key:
+        if len(acc.api_key) <= 12:
+            masked_key = "******"
+        else:
+            masked_key = f"{acc.api_key[:6]}******{acc.api_key[-6:]}"
+            
+    masked_session_token = None
+    if acc.api_session_token:
+        if len(acc.api_session_token) <= 12:
+            masked_session_token = "******"
+        else:
+            masked_session_token = f"{acc.api_session_token[:6]}******{acc.api_session_token[-6:]}"
+
     return AccountOut(
         id=acc.id,
         name=acc.name,
         status=acc.status,
         created_at=acc.created_at,
         active_cycle=_build_cycle_out(active_cycle),
+        api_type=acc.api_type,
+        api_url=acc.api_url,
+        api_key=masked_key,
+        api_account_id=acc.api_account_id,
+        api_session_token=masked_session_token,
     )
 
 
@@ -70,7 +111,16 @@ def create_account(
 ):
     from datetime import datetime
     now = datetime.utcnow()
-    acc = models.Account(user_id=current_user.id, name=body.name, created_at=now)
+    acc = models.Account(
+        user_id=current_user.id,
+        name=body.name,
+        created_at=now,
+        api_type=body.api_type,
+        api_url=body.api_url,
+        api_key=body.api_key,
+        api_account_id=body.api_account_id,
+        api_session_token=body.api_session_token,
+    )
     db.add(acc)
     db.flush()
 
@@ -110,8 +160,30 @@ def update_account(
         if body.status not in ("active", "disabled"):
             raise HTTPException(status_code=400, detail="状态值无效")
         acc.status = body.status
+    if body.api_type is not None:
+        acc.api_type = body.api_type
+    if body.api_url is not None:
+        acc.api_url = body.api_url
+    if body.api_key is not None:
+        if body.api_key == "":
+            acc.api_key = None
+        elif "***" not in body.api_key:
+            acc.api_key = body.api_key
+    if body.api_account_id is not None:
+        acc.api_account_id = body.api_account_id
+    if body.api_session_token is not None:
+        if body.api_session_token == "":
+            acc.api_session_token = None
+        elif "***" not in body.api_session_token:
+            acc.api_session_token = body.api_session_token
+        
     db.commit()
     db.refresh(acc)
+    try:
+        from app.cache import delete_cached_quota
+        delete_cached_quota(account_id)
+    except Exception as e:
+        print(f"Error clearing cache on update: {e}")
     return _build_account_out(acc)
 
 
@@ -251,6 +323,7 @@ def dashboard(
         items.append(CycleDashboardItem(
             account_id=acc.id,
             account_name=acc.name,
+            api_type=acc.api_type,
             cycle_id=active_cycle.id,
             cycle_number=active_cycle.cycle_number,
             amount=active_cycle.amount,
@@ -269,3 +342,182 @@ def dashboard(
         total_spent=round(total_spent, 4),
         cycles=items,
     )
+
+
+# ── REFRESH TOKEN HELPER ──────────────────────────────────────────────────────
+
+async def _refresh_session_token(acc: models.Account, db: Session) -> bool:
+    if not acc.api_session_token:
+        return False
+        
+    session_value = acc.api_session_token.strip()
+    if "=" not in session_value:
+        cookie_header = f"__Secure-next-auth.session-token={session_value}"
+    else:
+        segments = session_value.split(";")
+        matched_cookies = []
+        for segment in segments:
+            segment = segment.strip()
+            if not segment:
+                continue
+            if "=" in segment:
+                key, val = segment.split("=", 1)
+                key = key.strip()
+                val = val.strip()
+                if key == "__Secure-next-auth.session-token" or key.startswith("__Secure-next-auth.session-token."):
+                    matched_cookies.append(f"{key}={val}")
+        if matched_cookies:
+            cookie_header = "; ".join(matched_cookies)
+        else:
+            cookie_header = session_value
+            
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Cookie": cookie_header
+    }
+    
+    base_url = acc.api_url or "https://chatgpt.com"
+    base_url = base_url.rstrip("/")
+    session_url = f"{base_url}/api/auth/session"
+    
+    try:
+        async with httpx.AsyncClient(verify=False) as client:
+            response = await client.get(session_url, headers=headers, timeout=10.0)
+            if response.status_code == 200:
+                data = response.json()
+                new_token = data.get("accessToken")
+                if new_token:
+                    acc.api_key = new_token
+                    db.commit()
+                    db.refresh(acc)
+                    return True
+    except Exception as e:
+        print(f"Error refreshing session token: {e}")
+    return False
+
+
+# ── FETCH REAL-TIME BALANCE ──────────────────────────────────────────────────
+
+@router.get("/{account_id}/fetch-balance", response_model=CodexQuotaResponse)
+async def fetch_balance(
+    account_id: str,
+    force_refresh: bool = False,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    # Try getting from Redis cache first if force_refresh is False
+    from app.cache import get_cached_quota, set_cached_quota
+    
+    if not force_refresh:
+        cached_data = get_cached_quota(account_id)
+        if cached_data:
+            return CodexQuotaResponse(**cached_data)
+
+    acc = db.query(models.Account).filter(
+        models.Account.id == account_id,
+        models.Account.user_id == current_user.id,
+    ).first()
+    if not acc:
+        raise HTTPException(status_code=404, detail="账号不存在")
+        
+    if not acc.api_type or acc.api_type == "disabled":
+        raise HTTPException(status_code=400, detail="该账号未启用 API 额度自动查询")
+        
+    # Auto refresh if token is missing or expired and session token exists
+    should_refresh = False
+    if acc.api_session_token:
+        if not acc.api_key:
+            should_refresh = True
+        else:
+            exp = _get_jwt_exp(acc.api_key)
+            if not exp or exp < datetime.now(timezone.utc):
+                should_refresh = True
+                
+    if should_refresh:
+        await _refresh_session_token(acc, db)
+        
+    if not acc.api_key:
+        raise HTTPException(status_code=400, detail="该账号未配置 API Token 且无法通过 Session Cookie 自动刷新")
+        
+    base_url = acc.api_url or "https://chatgpt.com"
+    base_url = base_url.rstrip("/")
+    
+    headers = {
+        "Authorization": f"Bearer {acc.api_key}",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    if acc.api_account_id:
+        headers["ChatGPT-Account-Id"] = acc.api_account_id
+        
+    url = f"{base_url}/backend-api/wham/usage"
+    
+    try:
+        async with httpx.AsyncClient(verify=False) as client:
+            response = await client.get(url, headers=headers, timeout=10.0)
+            
+            # If 401 Unauthorized and we have a session token, try refreshing and retrying
+            if response.status_code == 401 and acc.api_session_token:
+                refreshed = await _refresh_session_token(acc, db)
+                if refreshed:
+                    headers["Authorization"] = f"Bearer {acc.api_key}"
+                    response = await client.get(url, headers=headers, timeout=10.0)
+            
+            # If wham/usage fails, try codex/usage
+            if response.status_code != 200:
+                alt_url = f"{base_url}/backend-api/codex/usage"
+                alt_response = await client.get(alt_url, headers=headers, timeout=10.0)
+                
+                # If retry alt_response is 401, retry refresh as well
+                if alt_response.status_code == 401 and acc.api_session_token:
+                    refreshed = await _refresh_session_token(acc, db)
+                    if refreshed:
+                        headers["Authorization"] = f"Bearer {acc.api_key}"
+                        alt_response = await client.get(alt_url, headers=headers, timeout=10.0)
+                        
+                if alt_response.status_code == 200:
+                    response = alt_response
+                    
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"请求 Codex 官方接口失败: {response.text[:200]}"
+                )
+                
+            data = response.json()
+            rate_limit = data.get("rate_limit", {})
+            primary = rate_limit.get("primary_window") or {}
+            secondary = rate_limit.get("secondary_window") or {}
+            
+            prim_used = primary.get("used_percent")
+            sec_used = secondary.get("used_percent")
+            
+            prim_rem = 100.0 - prim_used if prim_used is not None else None
+            sec_rem = 100.0 - sec_used if sec_used is not None else None
+            
+            quota_resp = CodexQuotaResponse(
+                plan_type=data.get("plan_type"),
+                primary_used_percent=prim_used,
+                primary_remaining_percent=prim_rem,
+                primary_reset_after_seconds=primary.get("reset_after_seconds"),
+                secondary_used_percent=sec_used,
+                secondary_remaining_percent=sec_rem,
+                secondary_reset_after_seconds=secondary.get("reset_after_seconds"),
+                token_expires_at=_get_jwt_exp(acc.api_key)
+            )
+            try:
+                set_cached_quota(account_id, quota_resp.model_dump())
+            except Exception as e:
+                print(f"Error caching quota response: {e}")
+            return quota_resp
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"网络请求失败，请检查 API 地址或代理设置: {str(exc)}"
+        )
+    except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"解析额度数据失败: {str(exc)}"
+        )
