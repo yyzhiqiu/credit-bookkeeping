@@ -48,6 +48,7 @@ export const accountsApi = {
 export const recordsApi = {
   list: (params) => api.get('/records', { params }),
   create: (data) => api.post('/records', data),
+  bulkCreate: (data) => api.post('/records/bulk', data),
   update: (id, data) => api.patch(`/records/${id}`, data),
   delete: (id) => api.delete(`/records/${id}`),
   exportCsv: (params) => {

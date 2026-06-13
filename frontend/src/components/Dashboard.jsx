@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, CreditCard, List, AlertCircle, RefreshCw, Play, Key, CheckCircle2 } from 'lucide-react'
+import { LayoutDashboard, CreditCard, List, AlertCircle, RefreshCw, Play, Key, CheckCircle2, Copy } from 'lucide-react'
 import { accountsApi, recordsApi } from '../api/client'
 import Select from './Select'
 
@@ -99,6 +99,10 @@ export default function Dashboard() {
 
   // Sync Modal State
   const [syncModalData, setSyncModalData] = useState(null)
+
+  // Batch Sync Modal State
+  const [showBatchModal, setShowBatchModal] = useState(false)
+  const [batchItems, setBatchItems] = useState([])
 
   const flash = (text, type = 'success') => {
     setMsg({ text, type })
@@ -204,6 +208,85 @@ export default function Dashboard() {
     }
   }
 
+  const handleOpenBatchModal = () => {
+    if (!data?.cycles) return;
+    const items = [];
+    data.cycles.forEach(item => {
+      if (item.api_type === 'codex') {
+        const live = liveQuotas[item.account_id];
+        if (live && live.data) {
+          const r1 = live.data.primary_remaining_percent;
+          const r2 = live.data.secondary_remaining_percent;
+          let activeR = r2 !== null ? r2 : r1;
+          if (activeR !== null && activeR < item.current_remaining_pct) {
+            items.push({
+              id: item.account_id,
+              name: item.account_name,
+              cycle_number: item.cycle_number,
+              weeks_count: item.weeks_count,
+              week_number: item.current_week_num,
+              baseline: item.current_remaining_pct,
+              remaining: activeR,
+              consumed: +(item.current_remaining_pct - activeR).toFixed(2),
+              description: '',
+              selected: true,
+            });
+          } else if (activeR !== null && activeR > item.current_remaining_pct) {
+            items.push({
+              id: item.account_id,
+              name: item.account_name,
+              cycle_number: item.cycle_number,
+              weeks_count: item.weeks_count,
+              week_number: item.current_week_num + 1,
+              baseline: 100.0,
+              remaining: activeR,
+              consumed: +(100.0 - activeR).toFixed(2),
+              description: '',
+              selected: true,
+              isReset: true,
+            });
+          }
+        }
+      }
+    });
+    
+    if (items.length === 0) {
+      flash('当前没有检测到发生额度掉落的账号（或额度仍在获取中）', 'success');
+      return;
+    }
+    setBatchItems(items);
+    setShowBatchModal(true);
+  }
+
+  const handleBatchSubmit = async (e) => {
+    e.preventDefault();
+    const selectedItems = batchItems.filter(i => i.selected);
+    if (selectedItems.length === 0) {
+      flash('请至少选择一个账号进行同步', 'error');
+      return;
+    }
+
+    const records = selectedItems.map(item => {
+      const cPct = parseFloat(item.consumed);
+      return {
+        account_id: item.id,
+        week_number: Number(item.week_number),
+        remaining_pct: item.remaining,
+        consumed_pct: isNaN(cPct) || cPct < 0 ? 0 : cPct,
+        description: item.description,
+      };
+    });
+
+    try {
+      await recordsApi.bulkCreate({ records });
+      flash(`成功批量同步了 ${records.length} 个账号的额度！`);
+      setShowBatchModal(false);
+      load(); // Reload dashboard
+    } catch (err) {
+      flash(err.response?.data?.detail || '批量同步失败', 'error');
+    }
+  }
+
   useEffect(() => { load() }, [])
 
   // Auto-fetch real-time quotas when dashboard data is loaded
@@ -245,9 +328,14 @@ export default function Dashboard() {
 
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-800">总览概况</h2>
-        <button onClick={load} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
-          <RefreshCw size={16} />
-        </button>
+        <div className="flex space-x-3">
+          <button onClick={handleOpenBatchModal} className="flex items-center space-x-1.5 bg-blue-600 text-white px-4 py-2 rounded-xl shadow hover:bg-blue-700 transition text-sm font-medium">
+            <Copy size={16} /><span>集中批量记账</span>
+          </button>
+          <button onClick={load} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+            <RefreshCw size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Stat cards */}
@@ -566,6 +654,121 @@ export default function Dashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Sync Modal */}
+      {showBatchModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl my-8 flex flex-col max-h-[90vh] animate-in">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+              <h3 className="text-xl font-bold text-slate-800 flex items-center">
+                <Copy className="mr-2 text-blue-600" size={22} />
+                集中扫视与批量记账
+              </h3>
+              <span className="text-sm text-slate-500 font-medium">
+                检测到 {batchItems.length} 个账号发生变动
+              </span>
+            </div>
+            
+            <div className="p-6 overflow-y-auto bg-slate-50/30 flex-1">
+              <form id="batch-form" onSubmit={handleBatchSubmit} className="space-y-4">
+                {batchItems.map((item, idx) => (
+                  <div key={item.id} className={`p-4 rounded-xl border ${item.selected ? 'bg-white border-blue-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'} transition-all`}>
+                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                      <div className="flex items-center space-x-3 w-full sm:w-1/4 shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={item.selected}
+                          onChange={(e) => {
+                            const newItems = [...batchItems];
+                            newItems[idx].selected = e.target.checked;
+                            setBatchItems(newItems);
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800 text-sm truncate max-w-[150px]" title={item.name}>{item.name}</div>
+                          {item.isReset ? (
+                            <div className="text-[10px] font-bold text-amber-600 mt-0.5 bg-amber-50 px-1.5 py-0.5 rounded inline-block">额度已重置</div>
+                          ) : (
+                            <div className="text-[10px] text-slate-500 mt-0.5">上次剩余: {item.baseline}%</div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex space-x-4 items-center w-full sm:w-1/4 shrink-0">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-slate-500 font-medium">线上剩余</span>
+                          <span className="font-bold text-blue-600">{item.remaining.toFixed(2)}%</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-slate-500 font-medium">业务周</span>
+                          <Select
+                            value={item.week_number}
+                            onChange={(val) => {
+                              const newItems = [...batchItems];
+                              newItems[idx].week_number = Number(val);
+                              setBatchItems(newItems);
+                            }}
+                            options={buildWeekOptions(item.weeks_count, item.week_number)}
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="w-full flex-1">
+                        <label className="block text-[10px] font-medium text-slate-500 mb-1">消耗事项（日记）</label>
+                        <input
+                          type="text"
+                          required={item.selected}
+                          value={item.description}
+                          onChange={(e) => {
+                            const newItems = [...batchItems];
+                            newItems[idx].description = e.target.value;
+                            setBatchItems(newItems);
+                          }}
+                          placeholder="例如：跑测试数据 / 翻译文档"
+                          className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-slate-50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </form>
+            </div>
+            
+            <div className="p-6 border-t border-slate-100 flex justify-between items-center bg-white rounded-b-2xl shrink-0">
+              <label className="flex items-center space-x-2 cursor-pointer text-sm font-medium text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={batchItems.length > 0 && batchItems.every(i => i.selected)}
+                  onChange={(e) => {
+                    const newItems = batchItems.map(i => ({ ...i, selected: e.target.checked }));
+                    setBatchItems(newItems);
+                  }}
+                  className="w-4 h-4 text-blue-600 rounded"
+                />
+                <span>全选 / 取消全选</span>
+              </label>
+              <div className="flex space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchModal(false)}
+                  className="px-5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-medium text-sm"
+                >
+                  取消
+                </button>
+                <button
+                  form="batch-form"
+                  type="submit"
+                  disabled={!batchItems.some(i => i.selected)}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  确认提交 ({batchItems.filter(i => i.selected).length})
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -192,6 +192,10 @@ class RecordOut(BaseModel):
     class Config:
         from_attributes = True
 
+class RecordBulkCreate(BaseModel):
+    records: List[RecordCreate]
+
+
 
 # ── Dashboard ────────────────────────────────────────────────────────────────
 

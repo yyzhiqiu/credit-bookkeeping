@@ -7,7 +7,7 @@ from ..database import get_db
 from .. import models
 from ..auth import get_current_user
 from ..engine import calculate_current_week, recalculate_week
-from ..schemas import RecordCreate, RecordUpdate, RecordOut
+from ..schemas import RecordCreate, RecordUpdate, RecordOut, RecordBulkCreate
 
 router = APIRouter(prefix="/api/records", tags=["records"])
 
@@ -122,6 +122,68 @@ def create_record(
     db.commit()
     db.refresh(rec)
     return _to_record_out(rec)
+
+
+@router.post("/bulk", response_model=List[RecordOut], status_code=status.HTTP_201_CREATED)
+def create_records_bulk(
+    body: RecordBulkCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    created_records = []
+    cycles_to_recalc = set()
+
+    for rec_in in body.records:
+        _verify_account(rec_in.account_id, current_user.id, db)
+
+        active_cycle = db.query(models.Cycle).filter(
+            models.Cycle.account_id == rec_in.account_id,
+            models.Cycle.status == "active",
+        ).first()
+        if not active_cycle:
+            raise HTTPException(status_code=400, detail=f"账号无活跃周期，请先续费")
+
+        max_recorded_week = (
+            db.query(models.Record.week_number)
+            .filter(models.Record.cycle_id == active_cycle.id)
+            .order_by(models.Record.week_number.desc())
+            .limit(1)
+            .scalar()
+            or 0
+        )
+        current_week = calculate_current_week(active_cycle.created_at, max_recorded_week)
+        max_allowed_week = max(active_cycle.weeks_count, current_week, max_recorded_week + 1)
+
+        if rec_in.week_number > max_allowed_week:
+            raise HTTPException(
+                status_code=400,
+                detail=f"业务周目前最多可填写到第 {max_allowed_week} 周",
+            )
+
+        rec = models.Record(
+            cycle_id=active_cycle.id,
+            account_id=rec_in.account_id,
+            week_number=rec_in.week_number,
+            remaining_pct=rec_in.remaining_pct,
+            consumed_pct=rec_in.consumed_pct,
+            consumed_amount=0.0,
+            cumulative_pct=0.0,
+            cumulative_amount=0.0,
+            description=rec_in.description,
+        )
+        db.add(rec)
+        db.flush()
+        created_records.append(rec)
+        cycles_to_recalc.add((active_cycle.id, rec_in.week_number))
+
+    for cycle_id, week_number in cycles_to_recalc:
+        recalculate_week(db, cycle_id, week_number)
+        
+    db.commit()
+    for rec in created_records:
+        db.refresh(rec)
+        
+    return [_to_record_out(rec) for rec in created_records]
 
 
 # ── UPDATE ───────────────────────────────────────────────────────────────────
