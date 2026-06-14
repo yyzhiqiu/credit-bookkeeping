@@ -10,3 +10,5 @@ python-multipart==0.0.9
 pydantic-settings==2.2.1
 httpx==0.28.1
 redis==5.0.4
+mcp>=1.0.0
+sse-starlette>=2.0.0

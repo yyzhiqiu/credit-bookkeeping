@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .routers import auth, accounts, records
+from .routers import auth, accounts, records, mcp_router
 
 from dotenv import load_dotenv
 
@@ -51,6 +51,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(accounts.router)
 app.include_router(records.router)
+app.include_router(mcp_router.router)
 
 
 @app.get("/", tags=["health"])

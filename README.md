@@ -129,6 +129,45 @@ npm run dev
 
 ---
 
+## 🤖 MCP (Model Context Protocol) 接入
+
+本项目原生集成了官方的 MCP 服务，让您的 AI 智能体（Agent）可以全自动地查额度并记账。无论您使用哪种框架（LangGraph, AutoGen，或是 Claude Desktop 等桌面端），只要您的 Agent 支持 MCP 协议，均可直接对接本系统的能力。
+
+### 暴露的 MCP Tools
+1. `get_accounts_summary`: 获取系统中当前可用的活跃账号列表、名称以及本地剩余额度。
+2. `check_online_quota`: 实时调用 Codex 接口，查询指定账号的线上真实剩余额度。
+3. `sync_and_record_expense` (🌟核心工具): 智能体在干完活后调用此工具，传入 `account_id` 和工作日记 `description`。系统会自动比对线上额度、计算本次消耗差值、完成数据库记账，并自动更新周累计数据。
+
+### 接入方式
+系统提供两种维度的通信接口，可根据您的智能体运行环境灵活选择。**请注意，所有的请求都必须进行身份验证，以保障额度和流水的安全隔离。**
+
+**方式一：HTTP SSE (Server-Sent Events) 接入（推荐）**
+随 FastAPI 后端默认启动，适用于支持 HTTP 远程调用的 Agent。
+* **Endpoint URL**: `http://localhost:8000/mcp/sse`
+* **鉴权方式**: HTTP Basic Auth。您需要在智能体配置中，将 `Authorization: Basic <base64编码的用户名:密码>` 加到请求 Header 里。
+
+**方式二：Stdio 标准输入输出接入**
+适用于 Claude Desktop、Cursor 等桌面级 Agent 客户端。
+在您的客户端配置文件（如 `mcp.json`）中添加以下配置（通过 `--username` 和 `--password` 传递登录凭证）：
+```json
+{
+  "mcpServers": {
+    "credit-bookkeeping": {
+      "command": "/绝对路径/到/您的/backend/venv/bin/python",
+      "args": [
+        "/绝对路径/到/您的/backend/mcp_stdio_main.py",
+        "--username",
+        "您的用户名",
+        "--password",
+        "您的密码"
+      ]
+    }
+  }
+}
+```
+
+---
+
 ## API 说明
 
 ### 鉴权
