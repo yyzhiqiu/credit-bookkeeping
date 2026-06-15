@@ -29,7 +29,7 @@ class Account(Base):
     status = Column(Enum("active", "disabled"), default="active", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
-    # API configuration for automatic quota queries (e.g. Codex)
+    # API configuration for user-triggered quota queries (e.g. Codex)
     api_type = Column(String(50), nullable=True)
     api_url = Column(String(255), nullable=True)
     api_key = Column(Text, nullable=True)

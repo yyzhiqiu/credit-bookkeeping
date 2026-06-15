@@ -6,3 +6,112 @@ INFO:     Waiting for application startup.
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Application startup complete.
+INFO:     127.0.0.1:51569 - "GET /ready HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51574 - "GET /v1/agents HTTP/1.1" 404 Not Found
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 401 Unauthorized
+INFO:     35.212.224.154:0 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts/dashboard/summary HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/records HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/db3cf722-6afd-4858-8022-cf3ea81a7b52/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/6d26d0fa-93dd-4c15-b270-05f879811e12/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "POST /api/records HTTP/1.1" 201 Created
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/records HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts/dashboard/summary HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/6d26d0fa-93dd-4c15-b270-05f879811e12/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/db3cf722-6afd-4858-8022-cf3ea81a7b52/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "PATCH /api/accounts/4225ecc7-efbb-4b93-bd30-8e79c48a1171 HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts/dashboard/summary HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/4225ecc7-efbb-4b93-bd30-8e79c48a1171/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/6d26d0fa-93dd-4c15-b270-05f879811e12/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/db3cf722-6afd-4858-8022-cf3ea81a7b52/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts/dashboard/summary HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/db3cf722-6afd-4858-8022-cf3ea81a7b52/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/4225ecc7-efbb-4b93-bd30-8e79c48a1171/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/6d26d0fa-93dd-4c15-b270-05f879811e12/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/4225ecc7-efbb-4b93-bd30-8e79c48a1171/fetch-balance?force_refresh=true HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts/dashboard/summary HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/records HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts/dashboard/summary HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts/dashboard/summary HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/records HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/4225ecc7-efbb-4b93-bd30-8e79c48a1171/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/db3cf722-6afd-4858-8022-cf3ea81a7b52/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/6d26d0fa-93dd-4c15-b270-05f879811e12/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts/dashboard/summary HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/records HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/4225ecc7-efbb-4b93-bd30-8e79c48a1171/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/db3cf722-6afd-4858-8022-cf3ea81a7b52/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/6d26d0fa-93dd-4c15-b270-05f879811e12/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/4225ecc7-efbb-4b93-bd30-8e79c48a1171/fetch-balance?force_refresh=true HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "POST /api/records/bulk HTTP/1.1" 201 Created
+INFO:     35.212.224.154:0 - "POST /api/records/bulk HTTP/1.1" 201 Created
+INFO:     35.212.224.154:0 - "GET /api/accounts/dashboard/summary HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts/dashboard/summary HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/db3cf722-6afd-4858-8022-cf3ea81a7b52/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/6d26d0fa-93dd-4c15-b270-05f879811e12/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/4225ecc7-efbb-4b93-bd30-8e79c48a1171/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/6d26d0fa-93dd-4c15-b270-05f879811e12/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/4225ecc7-efbb-4b93-bd30-8e79c48a1171/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/records HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/db3cf722-6afd-4858-8022-cf3ea81a7b52/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "DELETE /api/records/38b07b17-7e29-4ef2-9f8c-9fb5e360ab1e HTTP/1.1" 204 No Content
+/Users/baixuezhen/Desktop/workspace/credit-bookkeeping/backend/app/routers/records.py:247: SAWarning: DELETE statement on table 'records' expected to delete 1 row(s); 0 were matched.  Please set confirm_deleted_rows=False within the mapper configuration to prevent this warning.
+  db.flush()
+INFO:     35.212.224.154:0 - "DELETE /api/records/38b07b17-7e29-4ef2-9f8c-9fb5e360ab1e HTTP/1.1" 204 No Content
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/records HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/records HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "DELETE /api/records/cd6c17a0-07b6-47cb-ae25-422ff3aa3fd3 HTTP/1.1" 204 No Content
+INFO:     35.212.224.154:0 - "GET /api/accounts HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/records HTTP/1.1" 200 OK
+INFO:     35.212.224.154:0 - "GET /api/accounts/dashboard/summary HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/db3cf722-6afd-4858-8022-cf3ea81a7b52/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/4225ecc7-efbb-4b93-bd30-8e79c48a1171/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+Redis set error: Object of type datetime is not JSON serializable
+INFO:     35.212.224.154:0 - "GET /api/accounts/6d26d0fa-93dd-4c15-b270-05f879811e12/fetch-balance?force_refresh=false HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51956 - "GET / HTTP/1.1" 200 OK
+INFO:     None:0 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     None:0 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized

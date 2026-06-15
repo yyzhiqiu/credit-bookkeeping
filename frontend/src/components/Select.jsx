@@ -1,6 +1,11 @@
-import { Fragment } from 'react'
-import { Listbox, Transition } from '@headlessui/react'
-import { Check, ChevronDown } from 'lucide-react'
+import * as React from "react"
+import {
+  Select as ShadcnSelect,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select"
 
 /**
  * @param {Object} props
@@ -10,58 +15,36 @@ import { Check, ChevronDown } from 'lucide-react'
  * @param {string} [props.className]
  */
 export default function Select({ value, onChange, options, className = '' }) {
-  const selectedOption = options.find((opt) => opt.value == value) || options[0]
+  const stringValue = value !== undefined && value !== null ? String(value) : ""
+
+  const handleValueChange = (val) => {
+    const matchedOption = options.find(opt => String(opt.value) === val)
+    if (matchedOption) {
+      onChange(matchedOption.value)
+    } else {
+      onChange(val)
+    }
+  }
 
   return (
-    <div className={`relative ${className}`}>
-      <Listbox value={value} onChange={onChange}>
-        <Listbox.Button className="relative w-full cursor-pointer py-2.5 pl-4 pr-10 text-left bg-slate-50/50 border border-slate-200/80 rounded-xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all duration-200 shadow-sm text-sm text-slate-700 hover:border-slate-300">
-          <span className="block truncate font-medium">
-            {selectedOption?.label || '请选择'}
-          </span>
-          <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
-            <ChevronDown size={16} aria-hidden="true" />
-          </span>
-        </Listbox.Button>
-        <Transition
-          as={Fragment}
-          leave="transition ease-in duration-100"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <Listbox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl bg-white/95 backdrop-blur-md py-1 text-sm shadow-xl shadow-slate-200/50 border border-slate-100 ring-1 ring-black/5 focus:outline-none">
-            {options.map((option, idx) => (
-              <Listbox.Option
-                key={idx}
-                className={({ active }) =>
-                  `relative cursor-pointer select-none py-2.5 pl-10 pr-4 transition-colors ${
-                    active ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
-                  }`
-                }
-                value={option.value}
-                disabled={option.disabled}
-              >
-                {({ selected }) => (
-                  <>
-                    <span
-                      className={`block truncate ${
-                        selected ? 'font-bold text-blue-700' : 'font-medium'
-                      }`}
-                    >
-                      {option.label}
-                    </span>
-                    {selected ? (
-                      <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600">
-                        <Check size={16} aria-hidden="true" strokeWidth={3} />
-                      </span>
-                    ) : null}
-                  </>
-                )}
-              </Listbox.Option>
-            ))}
-          </Listbox.Options>
-        </Transition>
-      </Listbox>
+    <div className={`min-w-0 w-full ${className}`}>
+      <ShadcnSelect value={stringValue} onValueChange={handleValueChange}>
+        <SelectTrigger className="w-full bg-zinc-900/30 border-zinc-800 text-zinc-200 text-sm h-10 px-4">
+          <SelectValue placeholder="请选择" />
+        </SelectTrigger>
+        <SelectContent position="popper" className="bg-zinc-900/95 border-zinc-800 text-zinc-100 shadow-xl max-h-60 z-50">
+          {options.map((option, idx) => (
+            <SelectItem 
+              key={idx} 
+              value={String(option.value)}
+              disabled={option.disabled}
+              className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100 cursor-pointer"
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </ShadcnSelect>
     </div>
   )
 }

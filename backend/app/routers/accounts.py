@@ -421,7 +421,7 @@ async def fetch_balance(
         raise HTTPException(status_code=404, detail="账号不存在")
         
     if not acc.api_type or acc.api_type == "disabled":
-        raise HTTPException(status_code=400, detail="该账号未启用 API 额度自动查询")
+        raise HTTPException(status_code=400, detail="该账号未配置 API 额度查询")
         
     # Auto refresh if token is missing or expired and session token exists
     should_refresh = False

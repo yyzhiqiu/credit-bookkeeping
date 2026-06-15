@@ -2,15 +2,21 @@ import { useState, useEffect } from 'react'
 import { LayoutDashboard, CreditCard, List, AlertCircle, RefreshCw, Play, Key, CheckCircle2, Copy } from 'lucide-react'
 import { accountsApi, recordsApi } from '../api/client'
 import Select from './Select'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 
 const fmt = (v) => new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(v)
 
 function Toast({ msg }) {
   if (!msg.text) return null
   return (
-    <div className={`fixed top-4 right-4 p-4 rounded-xl flex items-center space-x-2 z-50 shadow-lg ${msg.type === 'error' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
-      {msg.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
-      <span className="font-medium text-sm">{msg.text}</span>
+    <div className={`fixed top-6 right-6 px-4 py-3 rounded-xl flex items-center space-x-2.5 z-50 shadow-xl border backdrop-blur-md transition-all duration-300 animate-in ${msg.type === 'error' ? 'bg-rose-950/90 border-rose-800/40 text-rose-200' : 'bg-emerald-950/90 border-emerald-800/40 text-emerald-200'}`}>
+      {msg.type === 'error' ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
+      <span className="font-semibold text-xs tracking-wide">{msg.text}</span>
     </div>
   )
 }
@@ -50,7 +56,7 @@ const formatTokenExpiry = (expiryStr) => {
   if (!expiryStr) return null
   const expiryDate = new Date(expiryStr)
   const diffMs = expiryDate - Date.now()
-  if (diffMs <= 0) return <span className="text-rose-500 font-bold">已过期</span>
+  if (diffMs <= 0) return <Badge variant="destructive" className="font-bold">已过期</Badge>
   
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
   const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
@@ -70,8 +76,8 @@ const formatTokenExpiry = (expiryStr) => {
   }
   
   return (
-    <span className="text-slate-500">
-      {formattedDate} <span className="text-blue-600 font-medium font-sans">({remainingText})</span>
+    <span className="text-zinc-400 font-mono text-[10px]">
+      {formattedDate} <span className="text-blue-400 font-semibold">({remainingText})</span>
     </span>
   )
 }
@@ -84,25 +90,102 @@ const buildWeekOptions = (weeksCount, currentWeekNum) => {
   }))
 }
 
+function QuotaSparkline({ cycleId, allRecords, width = 220, height = 36 }) {
+  const cycleRecs = allRecords.filter(r => r.cycle_id === cycleId)
+  const sortedRecs = [...cycleRecs].sort((a, b) => {
+    const weekDiff = Number(a.week_number) - Number(b.week_number)
+    return weekDiff || new Date(a.created_at) - new Date(b.created_at)
+  })
+
+  const chartValues = [{ percentage: 100, type: 'start' }]
+  let previousWeek = null
+
+  sortedRecs.forEach((record) => {
+    if (previousWeek !== null && record.week_number !== previousWeek) {
+      chartValues.push({
+        percentage: 100,
+        type: 'reset',
+        weekNumber: record.week_number,
+      })
+    }
+
+    chartValues.push({
+      percentage: Number(record.remaining_pct),
+      type: 'record',
+      weekNumber: record.week_number,
+    })
+    previousWeek = record.week_number
+  })
+
+  if (chartValues.length === 1) {
+    chartValues.push({ percentage: 100, type: 'empty' })
+  }
+
+  const padding = 2
+  const activeWidth = width - padding * 2
+  const activeHeight = height - padding * 2
+
+  const points = chartValues.map((value, i) => {
+    const safePercentage = Math.min(100, Math.max(0, value.percentage))
+    const x = padding + (i / (chartValues.length - 1)) * activeWidth
+    const y = padding + (1 - safePercentage / 100) * activeHeight
+    return { ...value, x, y }
+  })
+
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
+  const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${height} L ${points[0].x.toFixed(1)} ${height} Z`
+
+  return (
+    <div className="flex flex-col space-y-1 w-full max-w-[260px] shrink-0">
+      <div className="flex justify-between items-center text-[9px] text-zinc-500 font-bold mb-1 tracking-wider uppercase">
+        <span>额度扣减轨迹 (本期)</span>
+        <span className="text-blue-400 font-mono">点数: {sortedRecs.length}</span>
+      </div>
+      <div className="relative" style={{ height }}>
+        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="overflow-visible">
+          <defs>
+            <linearGradient id={`grad-${cycleId}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={areaPath} fill={`url(#grad-${cycleId})`} />
+          <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-[0_1px_4px_rgba(59,130,246,0.3)]" />
+          {points.map((p, idx) => (
+            <circle
+              key={`${p.type}-${p.weekNumber ?? 0}-${idx}`}
+              cx={p.x}
+              cy={p.y}
+              r={p.type === 'reset' ? 2.5 : 2}
+              fill={p.type === 'reset' ? '#3b82f6' : '#ffffff'}
+              stroke={p.type === 'reset' ? '#bfdbfe' : '#3b82f6'}
+              strokeWidth="1"
+              className="hover:r-3 cursor-crosshair transition-all"
+              title={p.type === 'reset'
+                ? `第 ${p.weekNumber} 周额度重置: 100%`
+                : `记录点: ${p.percentage}%`}
+            />
+          ))}
+        </svg>
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const [data, setData]     = useState(null)
+  const [allRecords, setAllRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError]   = useState('')
   const [msg, setMsg]       = useState({ text: '', type: '' })
 
-  // Real-time Quotas State
   const [liveQuotas, setLiveQuotas] = useState({})
-  
-  // Token inline updates
   const [tokenUpdateAccId, setTokenUpdateAccId] = useState(null)
   const [newTokenValue, setNewTokenValue] = useState('')
-
-  // Sync Modal State
   const [syncModalData, setSyncModalData] = useState(null)
-
-  // Batch Sync Modal State
   const [showBatchModal, setShowBatchModal] = useState(false)
   const [batchItems, setBatchItems] = useState([])
+  const [batchScanning, setBatchScanning] = useState(false)
 
   const flash = (text, type = 'success') => {
     setMsg({ text, type })
@@ -112,8 +195,12 @@ export default function Dashboard() {
   const load = async () => {
     setLoading(true); setError('')
     try {
-      const res = await accountsApi.dashboard()
-      setData(res.data)
+      const [dashRes, recsRes] = await Promise.all([
+        accountsApi.dashboard(),
+        recordsApi.list()
+      ])
+      setData(dashRes.data)
+      setAllRecords(recsRes.data)
     } catch {
       setError('加载失败，请重试')
     } finally {
@@ -132,6 +219,7 @@ export default function Dashboard() {
         ...prev,
         [accountId]: { loading: false, error: '', isUnauthorized: false, data: res.data }
       }))
+      return res.data
     } catch (err) {
       const errMsg = err.response?.data?.detail || '获取失败，请检查Token'
       const isUnauthorized = err.response?.status === 401
@@ -139,6 +227,7 @@ export default function Dashboard() {
         ...prev,
         [accountId]: { loading: false, error: errMsg, isUnauthorized, data: null }
       }))
+      return null
     }
   }
 
@@ -162,7 +251,6 @@ export default function Dashboard() {
     const rPct = parseFloat(remainingVal)
     if (isNaN(rPct)) { flash('同步的额度无效', 'error'); return }
     
-    // Determine baseline remaining % based on selected week
     const baseline = Number(weekNumber) === item.current_week_num ? item.current_remaining_pct : 100.0
     let cPct = +(baseline - rPct).toFixed(2)
     if (cPct < 0) {
@@ -179,7 +267,7 @@ export default function Dashboard() {
       })
       flash('对齐同步成功！')
       setSyncModalData(null)
-      load() // Reloads dashboard & re-triggers quota fetch
+      load()
     } catch (err) {
       flash(err.response?.data?.detail || '同步失败', 'error')
     }
@@ -208,15 +296,34 @@ export default function Dashboard() {
     }
   }
 
-  const handleOpenBatchModal = () => {
+  const handleOpenBatchModal = async () => {
     if (!data?.cycles) return;
+    const apiCycles = data.cycles.filter(item => item.api_type === 'codex');
+    if (apiCycles.length === 0) {
+      flash('当前没有配置线上额度查询的账号', 'error');
+      return;
+    }
+
+    setBatchScanning(true);
+    const quotaResults = await Promise.all(
+      apiCycles.map(async item => ({
+        accountId: item.account_id,
+        data: await fetchQuotaForAccount(item.account_id, true),
+      }))
+    );
+    setBatchScanning(false);
+
+    const quotasByAccount = Object.fromEntries(
+      quotaResults
+        .filter(result => result.data)
+        .map(result => [result.accountId, result.data])
+    );
     const items = [];
-    data.cycles.forEach(item => {
-      if (item.api_type === 'codex') {
-        const live = liveQuotas[item.account_id];
-        if (live && live.data) {
-          const r1 = live.data.primary_remaining_percent;
-          const r2 = live.data.secondary_remaining_percent;
+    apiCycles.forEach(item => {
+        const liveData = quotasByAccount[item.account_id];
+        if (liveData) {
+          const r1 = liveData.primary_remaining_percent;
+          const r2 = liveData.secondary_remaining_percent;
           let activeR = r2 !== null ? r2 : r1;
           if (activeR !== null && activeR < item.current_remaining_pct) {
             items.push({
@@ -247,11 +354,10 @@ export default function Dashboard() {
             });
           }
         }
-      }
     });
     
     if (items.length === 0) {
-      flash('当前没有检测到发生额度掉落的账号（或额度仍在获取中）', 'success');
+      flash('查询完成，当前没有需要对齐记账的额度变动', 'success');
       return;
     }
     setBatchItems(items);
@@ -281,7 +387,7 @@ export default function Dashboard() {
       await recordsApi.bulkCreate({ records });
       flash(`成功批量同步了 ${records.length} 个账号的额度！`);
       setShowBatchModal(false);
-      load(); // Reload dashboard
+      load();
     } catch (err) {
       flash(err.response?.data?.detail || '批量同步失败', 'error');
     }
@@ -289,336 +395,414 @@ export default function Dashboard() {
 
   useEffect(() => { load() }, [])
 
-  // Auto-fetch real-time quotas when dashboard data is loaded
-  useEffect(() => {
-    if (!data?.cycles) return
-    const apiCycles = data.cycles.filter(c => c.api_type === 'codex')
-    apiCycles.forEach(c => {
-      fetchQuotaForAccount(c.account_id)
-    })
-  }, [data])
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 space-y-4">
+        <RefreshCw className="animate-spin text-blue-500 w-8 h-8" />
+        <span className="text-zinc-400 text-sm font-medium animate-pulse">正在获取最新统计指标...</span>
+      </div>
+    )
+  }
 
-  if (loading) return <div className="text-slate-400 text-sm py-20 text-center animate-pulse">加载中...</div>
-  if (error)   return (
-    <div className="flex flex-col items-center py-20 space-y-4">
-      <p className="text-rose-500">{error}</p>
-      <button onClick={load} className="flex items-center space-x-2 text-blue-600 hover:underline text-sm">
-        <RefreshCw size={14} /><span>重新加载</span>
-      </button>
-    </div>
-  )
+  if (error) {
+    return (
+      <div className="flex flex-col items-center py-20 space-y-4 bg-zinc-900/30 border border-zinc-800 rounded-2xl p-6">
+        <AlertCircle size={32} className="text-rose-500" />
+        <p className="text-rose-400 text-sm font-semibold">{error}</p>
+        <Button id="dashboard-error-reload-btn" onClick={load} variant="outline" className="border-zinc-800 hover:bg-zinc-800 text-zinc-300" aria-label="错误重试">
+          <RefreshCw size={14} className="mr-1.5" />
+          <span>重新加载</span>
+        </Button>
+      </div>
+    )
+  }
 
   const { total_active_accounts, total_budget, total_spent, cycles } = data
 
   const statCards = [
-    { label: '当前活跃账号', value: `${total_active_accounts} 个`, icon: LayoutDashboard, color: 'blue' },
-    { label: '活跃周期总预算', value: fmt(total_budget), icon: CreditCard, color: 'emerald' },
-    { label: '活跃周期总已用', value: fmt(total_spent), icon: List, color: 'rose' },
+    { label: '活跃账号数量', value: `${total_active_accounts} 个`, icon: LayoutDashboard, gradient: 'from-blue-500/10 to-indigo-500/5', border: 'border-blue-500/20', iconColor: 'text-blue-400' },
+    { label: '周期总配额预算', value: fmt(total_budget), icon: CreditCard, gradient: 'from-emerald-500/10 to-teal-500/5', border: 'border-emerald-500/20', iconColor: 'text-emerald-400' },
+    { label: '周期总已用额度', value: fmt(total_spent), icon: List, gradient: 'from-rose-500/10 to-pink-500/5', border: 'border-rose-500/20', iconColor: 'text-rose-400' },
   ]
-
-  const colorMap = {
-    blue:    { bg: 'bg-blue-50',    text: 'text-blue-600' },
-    emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
-    rose:    { bg: 'bg-rose-50',    text: 'text-rose-600' },
-  }
 
   return (
     <div className="space-y-6">
       <Toast msg={msg} />
 
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-800">总览概况</h2>
-        <div className="flex space-x-3">
-          <button onClick={handleOpenBatchModal} className="flex items-center space-x-1.5 bg-blue-600 text-white px-4 py-2 rounded-xl shadow hover:bg-blue-700 transition text-sm font-medium">
-            <Copy size={16} /><span>集中批量记账</span>
-          </button>
-          <button onClick={load} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
-            <RefreshCw size={16} />
-          </button>
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-zinc-50">总览概况</h2>
+          <p className="text-xs text-zinc-400 mt-0.5">监控全局额度预算与线上套餐最新状态</p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Button
+            id="dashboard-batch-sync-trigger"
+            onClick={handleOpenBatchModal}
+            disabled={batchScanning}
+            className="bg-blue-600 hover:bg-blue-700 text-zinc-100 flex items-center space-x-1 text-xs px-3.5 py-4 rounded-xl shadow-lg shadow-blue-500/10"
+            aria-label="集中扫视并批量记账"
+          >
+            {batchScanning ? <RefreshCw size={14} className="animate-spin" /> : <Copy size={14} />}
+            <span>{batchScanning ? '正在查询...' : '集中扫视记账'}</span>
+          </Button>
+          <Button
+            id="dashboard-refresh-btn"
+            onClick={load}
+            variant="ghost"
+            className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-xl w-9 h-9 p-0"
+            aria-label="刷新全局总览数据"
+          >
+            <RefreshCw size={15} />
+          </Button>
         </div>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {statCards.map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-4">
-            <div className={`p-4 ${colorMap[color].bg} ${colorMap[color].text} rounded-xl`}>
-              <Icon size={22} />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">{label}</p>
-              <p className="text-xl font-bold text-slate-800 mt-0.5">{value}</p>
-            </div>
-          </div>
+        {statCards.map(({ label, value, icon: Icon, gradient, border, iconColor }) => (
+          <Card key={label} className={`bg-zinc-900/30 border ${border} bg-gradient-to-tr ${gradient} backdrop-blur-xl shadow-lg relative group overflow-hidden transition-all duration-300 hover:scale-[1.01] hover:border-zinc-700/80`}>
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-tr from-transparent to-white/[0.02] opacity-20 rounded-bl-full pointer-events-none transition-all duration-500 group-hover:scale-125" />
+            <CardContent className="p-5 flex items-center space-x-4 relative z-10">
+              <div className={`p-3 bg-zinc-900/80 rounded-xl border border-zinc-800 ${iconColor} transition-transform duration-300 group-hover:scale-110 shadow-inner`}>
+                <Icon size={20} />
+              </div>
+              <div>
+                <p className="text-[11px] text-zinc-400 font-bold uppercase tracking-wider">{label}</p>
+                <p className="text-xl font-extrabold text-zinc-100 mt-1 font-sans">{value}</p>
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       {/* Cycle progress cards */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-        <h3 className="text-base font-semibold text-slate-800 mb-5">各账号当前周期状态</h3>
-        {cycles.length === 0 ? (
-          <p className="text-slate-400 text-sm text-center py-8">暂无活跃周期，请先创建账号</p>
-        ) : (
-          <div className="space-y-5">
-            {cycles.map((item) => {
-              const pct = item.current_consumed_pct
-              const barColor = pct > 90 ? 'bg-rose-500' : pct > 70 ? 'bg-amber-400' : 'bg-emerald-500'
-              const isExtraWeek = item.current_week_num > item.weeks_count
-              return (
-                <div key={item.cycle_id} className="border border-slate-100 p-4 rounded-xl bg-slate-50/50">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-slate-800">{item.account_name}</span>
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
-                          第 {item.cycle_number} 期
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {isExtraWeek ? (
-                          <span className="text-amber-600 font-medium flex items-center">
-                            <AlertCircle size={12} className="mr-1" />当前第 {item.current_week_num} 业务周，已超出配置 {item.current_week_num - item.weeks_count} 周
-                          </span>
-                        ) : `进行至：第 ${item.current_week_num} 业务周 / 配置 ${item.weeks_count} 周`}
-                      </p>
-                    </div>
-                    <div className="text-right text-sm">
-                      <span className="text-slate-500 block">
-                        配置周预算: <span className="font-medium text-slate-700">{fmt(item.weekly_budget)}</span>
-                      </span>
-                      <span className="text-slate-500">
-                        本周已用: <span className="font-bold text-rose-600">
-                          {fmt(item.current_consumed_amount)}
-                        </span> ({pct}%)
-                      </span>
-                    </div>
-                  </div>
-                  <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-                    <div
-                      className={`h-3 rounded-full transition-all duration-700 ${barColor}`}
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between mt-1.5 text-xs font-medium">
-                    <span className="text-emerald-600">本周已记录剩余: {item.current_remaining_pct}%</span>
-                    <span className="text-slate-400">100%</span>
-                  </div>
-
-                  {/* Codex Real-time Quota Info */}
-                  {item.api_type === 'codex' && (
-                    <div className="mt-4 pt-3 border-t border-slate-200">
-                      {(() => {
-                        const live = liveQuotas[item.account_id]
-                        if (!live) return null
-                        if (live.loading) {
-                          return (
-                            <div className="text-xs text-slate-400 animate-pulse flex items-center space-x-1.5 py-1">
-                              <RefreshCw size={12} className="animate-spin" />
-                              <span>正在拉取 Codex 线上实时额度...</span>
+      <div className="flex flex-col space-y-4">
+        <div>
+          <h3 className="text-base font-extrabold text-zinc-100">各账号当前周期状态</h3>
+          <p className="text-xs text-zinc-400">显示当前周期各个账号已扣减的额度占比</p>
+        </div>
+        <div>
+          {cycles.length === 0 ? (
+            <div className="text-zinc-500 text-sm text-center py-12">暂无活跃周期，请先前往“账号与充值”创建账号</div>
+          ) : (
+            <div className="space-y-4.5">
+              {cycles.map((item) => {
+                const pct = item.current_consumed_pct
+                const barColor = pct > 90 
+                  ? 'from-rose-500 to-red-600' 
+                  : pct > 70 
+                    ? 'from-amber-500 to-orange-500' 
+                    : 'from-emerald-500 to-blue-500'
+                const isExtraWeek = item.current_week_num > item.weeks_count
+                return (
+                  <div key={item.cycle_id} className="border border-zinc-800/40 p-5 rounded-2xl bg-zinc-900/35 backdrop-blur-md hover:border-zinc-700/60 hover:bg-zinc-900/45 transition-all duration-300 shadow-lg flex flex-col gap-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 w-full">
+                      <div className="flex-1 w-full space-y-3">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-1">
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-bold text-zinc-100 text-sm">{item.account_name}</span>
+                              <Badge className="bg-blue-600/15 text-blue-400 border border-blue-500/20 hover:bg-blue-600/15 py-0 px-2 text-[10px] rounded-full">
+                                第 {item.cycle_number} 期
+                              </Badge>
                             </div>
-                          )
-                        }
-                        if (live.error) {
-                          return (
-                            <div className="text-xs text-rose-500 space-y-1.5 py-1">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-1.5">
-                                  <AlertCircle size={12} />
-                                  <span>实时额度获取失败: {live.error}</span>
-                                </div>
-                                <button
+                            <p className="text-[11px] text-zinc-400 mt-1">
+                              {isExtraWeek ? (
+                                <span className="text-amber-500 font-medium flex items-center">
+                                  <AlertCircle size={12} className="mr-1 text-amber-400" />
+                                  当前第 {item.current_week_num} 业务周，已超出预设 {item.current_week_num - item.weeks_count} 周
+                                </span>
+                              ) : `进行至：第 ${item.current_week_num} 业务周 / 配置 ${item.weeks_count} 周`}
+                            </p>
+                          </div>
+                          <div className="flex gap-4 sm:gap-6 mt-2 sm:mt-0">
+                            <div className="flex flex-col text-left sm:text-right">
+                              <span className="text-[10px] text-zinc-500 font-medium">周配额预算</span>
+                              <span className="text-xs font-semibold text-zinc-300 font-mono mt-0.5">{fmt(item.weekly_budget)}</span>
+                            </div>
+                            <div className="w-px bg-zinc-800/60 my-1 hidden sm:block" />
+                            <div className="flex flex-col text-left sm:text-right">
+                              <span className="text-[10px] text-zinc-500 font-medium">本周已记用量</span>
+                              <div className="flex items-baseline space-x-1 sm:justify-end mt-0.5">
+                                <span className="text-xs font-bold text-rose-400 font-mono">{fmt(item.current_consumed_amount)}</span>
+                                <span className="text-[9px] text-zinc-500">({pct}%)</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-2">
+                          <div className="flex justify-between items-end mb-1.5">
+                            <span className="text-[10px] text-zinc-400 font-medium tracking-wide">本地记录额度进度</span>
+                            <span className="text-[11px] font-bold text-emerald-400">剩余 {item.current_remaining_pct}%</span>
+                          </div>
+                          <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-900 shadow-inner">
+                            <div
+                              className={`h-1.5 rounded-full transition-all duration-700 bg-gradient-to-r ${barColor}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <QuotaSparkline cycleId={item.cycle_id} allRecords={allRecords} />
+                    </div>
+
+                    {/* Codex Real-time Quota Info */}
+                    {item.api_type === 'codex' && (
+                      <div className="border-t border-zinc-800/50 pt-3 mt-1">
+                        {(() => {
+                          const live = liveQuotas[item.account_id]
+                          if (!live) {
+                            return (
+                              <div className="flex items-center justify-between gap-3 py-1">
+                                <span className="text-[10px] text-zinc-500">线上额度仅在手动查询时获取</span>
+                                <Button
+                                  id={`fetch-btn-live-${item.account_id}`}
                                   type="button"
                                   onClick={() => fetchQuotaForAccount(item.account_id, true)}
-                                  className="text-blue-600 hover:text-blue-800 hover:underline flex items-center space-x-0.5 font-medium"
+                                  variant="outline"
+                                  className="h-7 px-2.5 text-[10px] border-blue-500/20 bg-blue-500/5 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300"
+                                  aria-label="手动查询线上实时配额"
                                 >
-                                  <RefreshCw size={10} />
-                                  <span>重试</span>
-                                </button>
+                                  <RefreshCw size={10} className="mr-1" />
+                                  查询线上额度
+                                </Button>
                               </div>
-                              {live.isUnauthorized && (
-                                <div className="mt-1">
-                                  {tokenUpdateAccId === item.account_id ? (
-                                    <div className="p-2 bg-white rounded border border-slate-200 space-y-1.5 max-w-sm">
-                                      <textarea
-                                        value={newTokenValue}
-                                        onChange={(e) => setNewTokenValue(e.target.value)}
-                                        placeholder="粘贴新 Access Token (ey...)"
-                                        rows={2}
-                                        className="w-full text-xs font-mono p-1 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                      />
-                                      <div className="flex justify-end space-x-1.5">
-                                        <button
-                                          type="button"
-                                          onClick={() => setTokenUpdateAccId(null)}
-                                          className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-[10px] font-medium"
-                                        >
-                                          取消
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleUpdateToken(item.account_id)}
-                                          className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-medium"
-                                        >
-                                          更新并重试
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => { setTokenUpdateAccId(item.account_id); setNewTokenValue('') }}
-                                      className="text-blue-600 hover:text-blue-800 underline font-semibold flex items-center space-x-0.5"
-                                    >
-                                      <Key size={10} className="mr-0.5" />
-                                      <span>快捷更新 Token</span>
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        }
-                        if (live.data) {
-                          const { primary_remaining_percent, secondary_remaining_percent } = live.data
-                          
-                          const showDiff = (livePct) => {
-                            const diff = +(livePct - item.current_remaining_pct).toFixed(2)
-                            if (diff === 0) return <span className="text-slate-400 ml-1.5 font-normal">(已同步)</span>
-                            if (diff < 0) return <span className="text-rose-500 ml-1.5 font-semibold">({diff}% 未记录)</span>
-                            return <span className="text-emerald-500 ml-1.5 font-semibold">(已重置 +{diff}%)</span>
+                            )
                           }
+                          if (live.loading) {
+                            return (
+                              <div className="text-[10px] text-zinc-400 animate-pulse flex items-center space-x-1.5 py-1">
+                                <RefreshCw size={12} className="animate-spin text-blue-500" />
+                                <span>正在查询 Codex 线上实时配额...</span>
+                              </div>
+                            )
+                          }
+                          if (live.error) {
+                            return (
+                              <div className="text-xs text-rose-400 space-y-1.5 py-1">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-1.5 text-[11px] text-rose-400 font-medium">
+                                    <AlertCircle size={12} />
+                                    <span className="truncate max-w-[280px] sm:max-w-md">实时配额获取失败: {live.error}</span>
+                                  </div>
+                                  <Button
+                                    id={`refresh-btn-live-${item.account_id}`}
+                                    type="button"
+                                    onClick={() => fetchQuotaForAccount(item.account_id, true)}
+                                    variant="link"
+                                    className="text-blue-400 hover:text-blue-300 p-0 h-auto text-[11px] font-semibold flex items-center space-x-0.5"
+                                    aria-label="重试获取实时配额"
+                                  >
+                                    <RefreshCw size={10} />
+                                    <span>重试</span>
+                                  </Button>
+                                </div>
+                                {live.isUnauthorized && (
+                                  <div className="mt-1 bg-zinc-950/40 p-2.5 rounded-xl border border-zinc-800 max-w-md">
+                                    {tokenUpdateAccId === item.account_id ? (
+                                      <div className="space-y-2">
+                                        <textarea
+                                          id={`edit-token-textarea-${item.account_id}`}
+                                          value={newTokenValue}
+                                          onChange={(e) => setNewTokenValue(e.target.value)}
+                                          placeholder="粘贴新的 Access Token (eyJhbGciOi...)"
+                                          rows={2}
+                                          className="w-full text-[10px] font-mono p-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 focus:outline-none focus:border-blue-500/50"
+                                        />
+                                        <div className="flex justify-end space-x-1.5">
+                                          <Button
+                                            id={`edit-token-cancel-${item.account_id}`}
+                                            type="button"
+                                            onClick={() => setTokenUpdateAccId(null)}
+                                            variant="ghost"
+                                            className="h-7 px-2.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-200"
+                                            aria-label="取消Token更新"
+                                          >
+                                            取消
+                                          </Button>
+                                          <Button
+                                            id={`edit-token-submit-${item.account_id}`}
+                                            type="button"
+                                            onClick={() => handleUpdateToken(item.account_id)}
+                                            className="h-7 px-2.5 text-[10px] font-medium bg-blue-600 hover:bg-blue-700 text-zinc-100"
+                                            aria-label="提交Token更新"
+                                          >
+                                            更新并重试
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <Button
+                                        id={`edit-token-trigger-${item.account_id}`}
+                                        type="button"
+                                        onClick={() => { setTokenUpdateAccId(item.account_id); setNewTokenValue('') }}
+                                        variant="link"
+                                        className="text-blue-400 hover:text-blue-300 p-0 h-auto text-[11px] font-bold"
+                                        aria-label="快捷更新 Token 按钮"
+                                      >
+                                        <Key size={10} className="mr-1" />
+                                        <span>更新授权 Token</span>
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          }
+                          if (live.data) {
+                            const { primary_remaining_percent, secondary_remaining_percent } = live.data
+                            
+                            const showDiff = (livePct) => {
+                              const diff = +(livePct - item.current_remaining_pct).toFixed(2)
+                              if (diff === 0) return <span className="text-zinc-500 ml-1.5 font-normal text-[9.5px]">(已对齐)</span>
+                              if (diff < 0) return <span className="text-rose-400 ml-1.5 font-semibold text-[9.5px]">({diff}% 未记录)</span>
+                              return <span className="text-emerald-400 ml-1.5 font-semibold text-[9.5px]">(已重置 +{diff}%)</span>
+                            }
 
-                          return (
-                            <div className="bg-blue-50/30 border border-blue-100/60 p-2.5 rounded-lg text-xs space-y-2">
-                              <div className="flex flex-col gap-0.5 pb-1.5 border-b border-blue-100/40 text-left">
-                                <div className="flex items-center justify-between text-[11px] font-semibold text-blue-800">
-                                  <div className="flex items-center space-x-1">
-                                    <span>Codex 线上实时额度</span>
-                                    <button
+                            const hasBoth = primary_remaining_percent !== null && secondary_remaining_percent !== null
+
+                            return (
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold text-zinc-500 pb-1">
+                                  <div className="flex items-center space-x-1.5 text-blue-400/90">
+                                    <span>Codex 线上实时配额</span>
+                                    <Button
+                                      id={`refresh-btn-live-success-${item.account_id}`}
                                       type="button"
                                       onClick={() => fetchQuotaForAccount(item.account_id, true)}
+                                      variant="ghost"
                                       title="强制刷新（绕过缓存）"
-                                      className="p-0.5 text-blue-500 hover:text-blue-700 hover:bg-blue-100/50 rounded transition-colors"
+                                      className="h-5 w-5 p-0 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                                      aria-label="强制刷新线上实时配额"
                                     >
-                                      <RefreshCw size={11} className={live.loading ? "animate-spin" : ""} />
-                                    </button>
+                                      <RefreshCw size={10} className={live.loading ? "animate-spin" : ""} />
+                                    </Button>
                                   </div>
-                                  <span>套餐: {live.data.plan_type || 'Pro'}</span>
+                                  <div className="flex items-center space-x-3 text-[10px] text-zinc-500 font-medium">
+                                    <span>套餐: <span className="text-zinc-400 font-semibold">{live.data.plan_type || 'Pro'}</span></span>
+                                    {live.data.token_expires_at && (
+                                      <span>Token: <span className="text-zinc-400 font-semibold">{formatTokenExpiry(live.data.token_expires_at)}</span></span>
+                                    )}
+                                  </div>
                                 </div>
-                                {live.data.token_expires_at && (
-                                  <div className="text-[10px] text-slate-500 font-medium">
-                                    Token 有效期至: {formatTokenExpiry(live.data.token_expires_at)}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left">
-                                {primary_remaining_percent !== null && (
-                                  <div className="flex justify-between items-center bg-white p-1.5 rounded border border-slate-100">
-                                    <div className="space-y-0.5">
-                                      <span className="block font-medium text-slate-500 text-[10px]">5小时额度剩余</span>
-                                      <div className="flex items-baseline">
-                                        <span className="font-bold text-blue-600 text-sm">
-                                          {primary_remaining_percent.toFixed(2)}%
-                                        </span>
-                                        {showDiff(primary_remaining_percent)}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                  {primary_remaining_percent !== null && (
+                                    <div className={`flex justify-between items-center py-2 px-1 ${hasBoth ? 'border-b border-zinc-800/10 sm:border-b-0 sm:border-r sm:border-zinc-800/20 sm:pr-4' : ''}`}>
+                                      <div className="space-y-1 text-left">
+                                        <div className="flex items-baseline space-x-1.5 flex-wrap">
+                                          <span className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider">5小时线上额度</span>
+                                          <span className="font-extrabold text-blue-400 text-xs sm:text-sm">
+                                            {primary_remaining_percent.toFixed(2)}%
+                                          </span>
+                                          {showDiff(primary_remaining_percent)}
+                                        </div>
+                                        {live.data.primary_reset_after_seconds > 0 && (
+                                          <span className="block text-[9.5px] text-zinc-500 font-medium leading-none">
+                                            重置: {getResetCalendarTime(live.data.primary_reset_after_seconds)} ({formatSeconds(live.data.primary_reset_after_seconds)}后)
+                                          </span>
+                                        )}
                                       </div>
-                                      {live.data.primary_reset_after_seconds > 0 && (
-                                        <span className="block text-[9px] text-amber-600 font-medium leading-none">
-                                          刷新: {getResetCalendarTime(live.data.primary_reset_after_seconds)} ({formatSeconds(live.data.primary_reset_after_seconds)}后)
-                                        </span>
-                                      )}
+                                      <Button
+                                        id={`sync-btn-primary-${item.account_id}`}
+                                        type="button"
+                                        onClick={() => handleOpenSyncModal(item, primary_remaining_percent, '5h额度')}
+                                        className="bg-blue-600/10 hover:bg-blue-600 text-blue-400 hover:text-zinc-100 font-bold h-7 text-[10px] px-2.5 rounded-lg transition-colors border border-blue-500/20"
+                                        aria-label="同步5小时额度"
+                                      >
+                                        同步
+                                      </Button>
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenSyncModal(item, primary_remaining_percent, '5h额度')}
-                                      className="bg-blue-600 text-white hover:bg-blue-700 font-bold py-1 px-2 rounded text-[10px] transition-colors"
-                                    >
-                                      一键同步
-                                    </button>
-                                  </div>
-                                )}
-                                {secondary_remaining_percent !== null && (
-                                  <div className="flex justify-between items-center bg-white p-1.5 rounded border border-slate-100">
-                                    <div className="space-y-0.5">
-                                      <span className="block font-medium text-slate-500 text-[10px]">每周额度剩余</span>
-                                      <div className="flex items-baseline">
-                                        <span className="font-bold text-emerald-600 text-sm">
-                                          {secondary_remaining_percent.toFixed(2)}%
-                                        </span>
-                                        {showDiff(secondary_remaining_percent)}
+                                  )}
+                                  {secondary_remaining_percent !== null && (
+                                    <div className={`flex justify-between items-center py-2 px-1 ${hasBoth ? 'sm:pl-4' : ''}`}>
+                                      <div className="space-y-1 text-left">
+                                        <div className="flex items-baseline space-x-1.5 flex-wrap">
+                                          <span className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider">每周线上限额</span>
+                                          <span className="font-extrabold text-emerald-400 text-xs sm:text-sm">
+                                            {secondary_remaining_percent.toFixed(2)}%
+                                          </span>
+                                          {showDiff(secondary_remaining_percent)}
+                                        </div>
+                                        {live.data.secondary_reset_after_seconds > 0 && (
+                                          <span className="block text-[9.5px] text-zinc-500 font-medium leading-none">
+                                            重置: {getResetCalendarTime(live.data.secondary_reset_after_seconds)} ({formatSeconds(live.data.secondary_reset_after_seconds)}后)
+                                          </span>
+                                        )}
                                       </div>
-                                      {live.data.secondary_reset_after_seconds > 0 && (
-                                        <span className="block text-[9px] text-amber-600 font-medium leading-none">
-                                          刷新: {getResetCalendarTime(live.data.secondary_reset_after_seconds)} ({formatSeconds(live.data.secondary_reset_after_seconds)}后)
-                                        </span>
-                                      )}
+                                      <Button
+                                        id={`sync-btn-secondary-${item.account_id}`}
+                                        type="button"
+                                        onClick={() => handleOpenSyncModal(item, secondary_remaining_percent, '周额度')}
+                                        className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-zinc-100 font-bold h-7 text-[10px] px-2.5 rounded-lg transition-colors border border-emerald-500/20"
+                                        aria-label="同步每周限额"
+                                      >
+                                        同步
+                                      </Button>
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenSyncModal(item, secondary_remaining_percent, '周额度')}
-                                      className="bg-emerald-600 text-white hover:bg-emerald-700 font-bold py-1 px-2 rounded text-[10px] transition-colors"
-                                    >
-                                      一键同步
-                                    </button>
-                                  </div>
-                                )}
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          )
-                        }
-                        return null
-                      })()}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
+                            )
+                          }
+                          return null
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Sync Modal */}
-      {syncModalData && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md animate-in text-left">
-            <h3 className="text-lg font-bold mb-4 text-slate-800 flex items-center">
-              <Play className="mr-2 text-blue-600" size={18} />
-              同步线上额度并记账
-            </h3>
+      <Dialog open={!!syncModalData} onOpenChange={(open) => { if (!open) setSyncModalData(null) }}>
+        {syncModalData && (
+          <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto border-zinc-800 bg-zinc-900 p-5 text-zinc-100 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-zinc-100 flex items-center">
+                <Play className="mr-2 text-blue-500" size={16} />
+                同步线上额度并记账
+              </DialogTitle>
+            </DialogHeader>
             
             {syncModalData.isResetDetected && (
-              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs space-y-1">
+              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-200 rounded-xl text-[11px] leading-relaxed space-y-1">
                 <p className="font-bold flex items-center">
-                  <AlertCircle size={14} className="mr-1" /> 检测到额度已重置/回升
+                  <AlertCircle size={13} className="mr-1.5 text-amber-400" /> 额度已自动重置/回升
                 </p>
-                <p>当前线上剩余（{syncModalData.remainingVal.toFixed(2)}%）大于上次记录（{syncModalData.item.current_remaining_pct}%）。系统已为您自动切换至**下一业务周**。</p>
+                <p>当前线上剩余（{syncModalData.remainingVal.toFixed(2)}%）大于上次记录（{syncModalData.item.current_remaining_pct}%）。系统已自动为您递增并切换至**下一业务周**。</p>
               </div>
             )}
             
             <form onSubmit={handleQuickSyncSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">账号名称</label>
-                <input
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-400">账号名称</Label>
+                <Input
                   type="text"
                   disabled
                   value={syncModalData.item.account_name}
-                  className="form-input bg-slate-50 text-slate-500 cursor-not-allowed text-sm"
+                  className="bg-zinc-800/40 border-zinc-800 text-zinc-400 text-sm cursor-not-allowed h-11"
                 />
               </div>
               
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">线上剩余比例</label>
-                  <input
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-zinc-400">线上剩余比例</Label>
+                  <Input
                     type="text"
                     disabled
                     value={`${syncModalData.remainingVal.toFixed(2)}%`}
-                    className="form-input bg-slate-50 text-slate-500 cursor-not-allowed font-bold text-sm"
+                    className="bg-zinc-800/40 border-zinc-800 text-zinc-200 font-bold text-sm cursor-not-allowed h-11"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">业务周</label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sync-dialog-week-select" className="text-xs text-zinc-400">业务周</Label>
                   <Select
+                    id="sync-dialog-week-select"
                     value={syncModalData.weekNumber}
                     onChange={(val) => setSyncModalData(prev => ({ ...prev, weekNumber: Number(val) }))}
                     options={buildWeekOptions(syncModalData.item.weeks_count, syncModalData.item.current_week_num)}
@@ -626,152 +810,167 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">消耗事项（核心说明）</label>
+              <div className="space-y-1.5">
+                <Label htmlFor="sync-dialog-desc" className="text-xs text-zinc-400">消耗事项（说明）</Label>
                 <textarea
+                  id="sync-dialog-desc"
                   required
                   value={syncModalData.desc}
                   onChange={(e) => setSyncModalData(prev => ({ ...prev, desc: e.target.value }))}
-                  placeholder="请输入本次同步的消耗原因，例如：跑批量接口 / 翻译文档"
+                  placeholder="如：跑批量评估接口 / 中英翻译"
                   rows={3}
-                  className="form-input resize-none text-sm"
+                  className="w-full text-sm p-3 bg-zinc-800/30 border border-zinc-800 rounded-xl text-zinc-200 focus:outline-none focus:border-blue-500/50 resize-none"
                 />
               </div>
 
-              <div className="flex justify-end space-x-3 pt-2">
-                <button
+              <DialogFooter className="border-t border-zinc-800 pt-4">
+                <Button
+                  id="sync-dialog-cancel"
                   type="button"
                   onClick={() => setSyncModalData(null)}
-                  className="px-5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-medium text-sm"
+                  variant="ghost"
+                  className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 font-semibold"
+                  aria-label="取消同步"
                 >
                   取消
-                </button>
-                <button
+                </Button>
+                <Button
+                  id="sync-dialog-submit"
                   type="submit"
-                  className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm shadow-md"
+                  className="bg-blue-600 hover:bg-blue-700 text-zinc-100 font-semibold"
+                  aria-label="确定并同步记账"
                 >
-                  确认同步记账
-                </button>
-              </div>
+                  确认同步
+                </Button>
+              </DialogFooter>
             </form>
-          </div>
-        </div>
-      )}
+          </DialogContent>
+        )}
+      </Dialog>
 
       {/* Batch Sync Modal */}
-      {showBatchModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl my-8 flex flex-col max-h-[90vh] animate-in">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
-              <h3 className="text-xl font-bold text-slate-800 flex items-center">
-                <Copy className="mr-2 text-blue-600" size={22} />
-                集中扫视与批量记账
-              </h3>
-              <span className="text-sm text-slate-500 font-medium">
-                检测到 {batchItems.length} 个账号发生变动
-              </span>
-            </div>
-            
-            <div className="p-6 overflow-y-auto bg-slate-50/30 flex-1">
-              <form id="batch-form" onSubmit={handleBatchSubmit} className="space-y-4">
-                {batchItems.map((item, idx) => (
-                  <div key={item.id} className={`p-4 rounded-xl border ${item.selected ? 'bg-white border-blue-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'} transition-all`}>
-                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                      <div className="flex items-center space-x-3 w-full sm:w-1/4 shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={item.selected}
-                          onChange={(e) => {
+      <Dialog open={showBatchModal} onOpenChange={setShowBatchModal}>
+        <DialogContent className="flex max-h-[88vh] max-w-4xl flex-col gap-0 overflow-hidden border-zinc-800 bg-zinc-900 p-0 text-zinc-100">
+          <div className="flex flex-col gap-3 border-b border-zinc-800 bg-zinc-900/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <DialogTitle className="flex items-center pr-8 text-base font-bold text-zinc-100">
+              <Copy className="mr-2 text-blue-500" size={18} />
+              集中扫视与批量对齐
+            </DialogTitle>
+            <Badge className="bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-800 py-0.5 px-2 text-[10px]">
+              监测到 {batchItems.length} 个账号变动
+            </Badge>
+          </div>
+          
+          <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-950/20 p-4 sm:p-6">
+            <form id="batch-form" onSubmit={handleBatchSubmit} className="space-y-3">
+              {batchItems.map((item, idx) => (
+                <div key={item.id} className={`rounded-xl border p-4 transition-all duration-200 ${item.selected ? 'border-blue-500/40 bg-zinc-900/80 shadow-md' : 'border-zinc-800 bg-zinc-950/20 opacity-60'}`}>
+                  <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.05fr)_minmax(190px,0.8fr)_minmax(220px,1.25fr)] md:items-end">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <input
+                        id={`batch-checkbox-${item.id}`}
+                        type="checkbox"
+                        checked={item.selected}
+                        onChange={(e) => {
+                          const newItems = [...batchItems];
+                          newItems[idx].selected = e.target.checked;
+                          setBatchItems(newItems);
+                        }}
+                        className="w-4 h-4 rounded text-blue-600 border-zinc-700 focus:ring-0 focus:ring-offset-0 bg-zinc-900 cursor-pointer accent-blue-600"
+                        aria-label={`勾选同步账号 ${item.name}`}
+                      />
+                      <div className="min-w-0">
+                        <div className="truncate text-xs font-bold text-zinc-200" title={item.name}>{item.name}</div>
+                        {item.isReset ? (
+                          <span className="text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1 py-0.5 rounded inline-block mt-0.5">额度已充置</span>
+                        ) : (
+                          <div className="text-[10px] text-zinc-400 mt-0.5 font-mono">前次: {item.baseline}%</div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="grid min-w-0 grid-cols-[minmax(72px,0.7fr)_minmax(110px,1fr)] items-end gap-3">
+                      <div className="flex min-w-0 flex-col">
+                        <span className="text-[10px] text-zinc-500 font-semibold">线上剩余</span>
+                        <span className="font-bold text-blue-400 text-xs mt-0.5">{item.remaining.toFixed(2)}%</span>
+                      </div>
+                      <div className="flex min-w-0 flex-col">
+                        <span className="text-[10px] text-zinc-500 font-semibold mb-1">记入周次</span>
+                        <Select
+                          id={`batch-week-${item.id}`}
+                          value={item.week_number}
+                          onChange={(val) => {
                             const newItems = [...batchItems];
-                            newItems[idx].selected = e.target.checked;
+                            newItems[idx].week_number = Number(val);
                             setBatchItems(newItems);
                           }}
-                          className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                        />
-                        <div>
-                          <div className="font-bold text-slate-800 text-sm truncate max-w-[150px]" title={item.name}>{item.name}</div>
-                          {item.isReset ? (
-                            <div className="text-[10px] font-bold text-amber-600 mt-0.5 bg-amber-50 px-1.5 py-0.5 rounded inline-block">额度已重置</div>
-                          ) : (
-                            <div className="text-[10px] text-slate-500 mt-0.5">上次剩余: {item.baseline}%</div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="flex space-x-4 items-center w-full sm:w-1/4 shrink-0">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] text-slate-500 font-medium">线上剩余</span>
-                          <span className="font-bold text-blue-600">{item.remaining.toFixed(2)}%</span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] text-slate-500 font-medium">业务周</span>
-                          <Select
-                            value={item.week_number}
-                            onChange={(val) => {
-                              const newItems = [...batchItems];
-                              newItems[idx].week_number = Number(val);
-                              setBatchItems(newItems);
-                            }}
-                            options={buildWeekOptions(item.weeks_count, item.week_number)}
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="w-full flex-1">
-                        <label className="block text-[10px] font-medium text-slate-500 mb-1">消耗事项（日记）</label>
-                        <input
-                          type="text"
-                          required={item.selected}
-                          value={item.description}
-                          onChange={(e) => {
-                            const newItems = [...batchItems];
-                            newItems[idx].description = e.target.value;
-                            setBatchItems(newItems);
-                          }}
-                          placeholder="例如：跑测试数据 / 翻译文档"
-                          className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-slate-50"
+                          options={buildWeekOptions(item.weeks_count, item.week_number)}
                         />
                       </div>
                     </div>
+                    
+                    <div className="min-w-0">
+                      <Label htmlFor={`batch-desc-${item.id}`} className="block text-[10px] font-semibold text-zinc-500 mb-1">消耗描述（事件）</Label>
+                      <Input
+                        id={`batch-desc-${item.id}`}
+                        type="text"
+                        required={item.selected}
+                        value={item.description}
+                        onChange={(e) => {
+                          const newItems = [...batchItems];
+                          newItems[idx].description = e.target.value;
+                          setBatchItems(newItems);
+                        }}
+                        placeholder="如: 代码调试 / API 测试"
+                        className="w-full bg-zinc-950/50 border-zinc-800 text-xs focus-visible:ring-blue-500/30 text-zinc-200 h-9 px-3 rounded-lg"
+                      />
+                    </div>
                   </div>
-                ))}
-              </form>
-            </div>
-            
-            <div className="p-6 border-t border-slate-100 flex justify-between items-center bg-white rounded-b-2xl shrink-0">
-              <label className="flex items-center space-x-2 cursor-pointer text-sm font-medium text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={batchItems.length > 0 && batchItems.every(i => i.selected)}
-                  onChange={(e) => {
-                    const newItems = batchItems.map(i => ({ ...i, selected: e.target.checked }));
-                    setBatchItems(newItems);
-                  }}
-                  className="w-4 h-4 text-blue-600 rounded"
-                />
-                <span>全选 / 取消全选</span>
-              </label>
-              <div className="flex space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowBatchModal(false)}
-                  className="px-5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-medium text-sm"
-                >
-                  取消
-                </button>
-                <button
-                  form="batch-form"
-                  type="submit"
-                  disabled={!batchItems.some(i => i.selected)}
-                  className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  确认提交 ({batchItems.filter(i => i.selected).length})
-                </button>
-              </div>
+                </div>
+              ))}
+            </form>
+          </div>
+          
+          <div className="flex flex-col gap-4 border-t border-zinc-800 bg-zinc-900/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <label className="flex items-center space-x-2 cursor-pointer text-xs font-semibold text-zinc-400 hover:text-zinc-200">
+              <input
+                id="batch-select-all"
+                type="checkbox"
+                checked={batchItems.length > 0 && batchItems.every(i => i.selected)}
+                onChange={(e) => {
+                  const newItems = batchItems.map(i => ({ ...i, selected: e.target.checked }));
+                  setBatchItems(newItems);
+                }}
+                className="w-4 h-4 rounded text-blue-600 border-zinc-700 bg-zinc-900 cursor-pointer accent-blue-600"
+                aria-label="选择全部或取消全选"
+              />
+              <span>全选 / 取消全选</span>
+            </label>
+            <div className="flex w-full gap-2.5 sm:w-auto">
+              <Button
+                id="batch-sync-cancel"
+                type="button"
+                onClick={() => setShowBatchModal(false)}
+                variant="ghost"
+                className="h-9 flex-1 rounded-xl px-4 text-xs font-semibold text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200 sm:flex-none"
+                aria-label="取消批量记账"
+              >
+                取消
+              </Button>
+              <Button
+                id="batch-sync-submit"
+                form="batch-form"
+                type="submit"
+                disabled={!batchItems.some(i => i.selected)}
+                className="h-9 flex-1 rounded-xl bg-blue-600 px-4 text-xs font-semibold text-zinc-100 shadow-lg shadow-blue-500/10 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                aria-label="确认提交批量记账表单"
+              >
+                确认对齐记账 ({batchItems.filter(i => i.selected).length})
+              </Button>
             </div>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

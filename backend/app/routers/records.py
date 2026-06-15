@@ -1,6 +1,8 @@
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 import csv, io
 from ..database import get_db
@@ -43,6 +45,47 @@ def _verify_account(account_id: str, user_id: str, db: Session) -> models.Accoun
     return acc
 
 
+def _as_utc_naive(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None or value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _apply_record_filters(
+    q,
+    account_id: Optional[str] = None,
+    cycle_id: Optional[str] = None,
+    week_number: Optional[int] = None,
+    keyword: Optional[str] = None,
+    created_from: Optional[datetime] = None,
+    created_before: Optional[datetime] = None,
+):
+    if account_id:
+        q = q.filter(models.Record.account_id == account_id)
+    if cycle_id:
+        q = q.filter(models.Record.cycle_id == cycle_id)
+    if week_number is not None:
+        q = q.filter(models.Record.week_number == week_number)
+    if keyword and keyword.strip():
+        pattern = f"%{keyword.strip()}%"
+        q = q.filter(
+            or_(
+                models.Account.name.ilike(pattern),
+                models.Record.description.ilike(pattern),
+            )
+        )
+
+    start = _as_utc_naive(created_from)
+    end = _as_utc_naive(created_before)
+    if start and end and start >= end:
+        raise HTTPException(status_code=400, detail="结束日期必须晚于开始日期")
+    if start:
+        q = q.filter(models.Record.created_at >= start)
+    if end:
+        q = q.filter(models.Record.created_at < end)
+    return q
+
+
 # ── LIST ─────────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=List[RecordOut])
@@ -50,6 +93,9 @@ def list_records(
     account_id: Optional[str] = None,
     cycle_id: Optional[str] = None,
     week_number: Optional[int] = None,
+    keyword: Optional[str] = None,
+    created_from: Optional[datetime] = None,
+    created_before: Optional[datetime] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -59,12 +105,15 @@ def list_records(
         .join(models.Account, models.Record.account_id == models.Account.id)
         .filter(models.Account.user_id == current_user.id)
     )
-    if account_id:
-        q = q.filter(models.Record.account_id == account_id)
-    if cycle_id:
-        q = q.filter(models.Record.cycle_id == cycle_id)
-    if week_number is not None:
-        q = q.filter(models.Record.week_number == week_number)
+    q = _apply_record_filters(
+        q,
+        account_id=account_id,
+        cycle_id=cycle_id,
+        week_number=week_number,
+        keyword=keyword,
+        created_from=created_from,
+        created_before=created_before,
+    )
 
     records = q.order_by(models.Record.created_at.desc()).all()
     return [_to_record_out(r) for r in records]
@@ -255,6 +304,9 @@ def delete_record(
 def export_csv(
     account_id: Optional[str] = None,
     cycle_id: Optional[str] = None,
+    keyword: Optional[str] = None,
+    created_from: Optional[datetime] = None,
+    created_before: Optional[datetime] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -263,10 +315,14 @@ def export_csv(
         .join(models.Account, models.Record.account_id == models.Account.id)
         .filter(models.Account.user_id == current_user.id)
     )
-    if account_id:
-        q = q.filter(models.Record.account_id == account_id)
-    if cycle_id:
-        q = q.filter(models.Record.cycle_id == cycle_id)
+    q = _apply_record_filters(
+        q,
+        account_id=account_id,
+        cycle_id=cycle_id,
+        keyword=keyword,
+        created_from=created_from,
+        created_before=created_before,
+    )
 
     records = q.order_by(models.Record.created_at.desc()).all()
 
